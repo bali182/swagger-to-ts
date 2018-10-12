@@ -6,7 +6,7 @@ type Defs = { [name: string]: JSONSchema4 }
 
 function generateConstEnum(name: string, schema: JSONSchema4): string {
   return `export const enum ${name} {
-    ${schema.enum.map((value) => `${value} = '${value}'`).join(',\n')}
+    ${schema.enum.map((value) => `${value} = '${value}'`).join(',')}
   }`
 }
 
@@ -44,6 +44,8 @@ function generateFieldType(schema: JSONSchema4): string {
     return `${itemsType}[]`
   } else if (isOneOfType(schema)) {
     return schema.oneOf.map(generateFieldType).join('|')
+  } else if (isObjectType(schema)) {
+    return `{${generateInterfaceFields(schema.properties)}}`
   }
   throw new TypeError(`${JSON.stringify(schema)} is of unknown type, cannot be generated`)
 }
@@ -52,13 +54,23 @@ function generateInterfaceField(name: string, schema: JSONSchema4): string {
   return `${name}:${generateFieldType(schema)}`
 }
 
+function generateInterfaceFields(schema: JSONSchema4): string {
+  return Object.keys(schema || {})
+    .map((name) => generateInterfaceField(name, schema[name]))
+    .join(';\n')
+}
+
+function generateTypeBody(schema: JSONSchema4): string {
+  return `{${generateInterfaceFields(schema.properties)}}`
+}
+
 function generateInterface(name: string, schema: JSONSchema4): string {
-  const fields = Object.keys(schema.properties || {})
-    .map((name) => generateInterfaceField(name, schema.properties[name]))
-    .join('\n')
-  return `export type ${name} = {
-    ${fields}
-  }`
+  if (schema.allOf && schema.allOf.length > 0 && schema.allOf.every(isRefType)) {
+    const extendedIfs = schema.allOf.map((t) => refToTypeName(t.$ref)).join(' & ')
+    const ifsWithBraces = schema.allOf.length > 1 ? `(${extendedIfs})` : extendedIfs
+    return `export type ${name} = ${ifsWithBraces} & ${generateTypeBody(schema)}`
+  }
+  return `export type ${name} = ${generateTypeBody(schema)}`
 }
 
 function generateOneOfType(name: string, schema: JSONSchema4): string {
