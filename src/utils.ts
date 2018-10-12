@@ -4,7 +4,8 @@ export function isObjectType(input: JSONSchema4): boolean {
   return input.type === 'object' || Boolean(input.properties)
 }
 export function isEnumType(input: JSONSchema4): boolean {
-  return Boolean(input.enum)
+  // We only handle string enums
+  return Boolean(input.enum) && (input.type === 'string' || input.enum.every((s) => typeof s === 'string'))
 }
 export function isArrayType(input: JSONSchema4): boolean {
   return input.type === 'array' || Boolean(input.items)

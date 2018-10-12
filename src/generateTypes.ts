@@ -30,19 +30,22 @@ function getPrimitiveFieldType(schema: JSONSchema4): string {
 }
 
 function generateFieldType(schema: JSONSchema4): string {
-  if (isPrimitiveType(schema)) {
+  if (isEnumType(schema)) {
+    return schema.enum.map((value) => `'${value}'`).join('|')
+  } else if (isPrimitiveType(schema)) {
     return getPrimitiveFieldType(schema)
   } else if (isRefType(schema)) {
     return refToTypeName(schema.$ref)
   } else if (isArrayType(schema)) {
-    let tpe = generateFieldType(schema.items)
-    if (isOneOfType(schema.items)) {
-      tpe = `(${tpe})`
-    }
-    return `${tpe}[]`
+    const itemsType =
+      isOneOfType(schema.items) && schema.items.length > 1
+        ? `(${generateFieldType(schema.items)})`
+        : generateFieldType(schema.items)
+    return `${itemsType}[]`
   } else if (isOneOfType(schema)) {
     return schema.oneOf.map(generateFieldType).join('|')
   }
+  throw new TypeError(`${JSON.stringify(schema)} is of unknown type, cannot be generated`)
 }
 
 function generateInterfaceField(name: string, schema: JSONSchema4): string {
@@ -62,6 +65,10 @@ function generateOneOfType(name: string, schema: JSONSchema4): string {
   return `export type ${name} = ${schema.oneOf.map(generateFieldType).join('|')}`
 }
 
+function generateArrayType(name: string, schema: JSONSchema4): string {
+  return `export type ${name} = ${generateFieldType(schema)}`
+}
+
 function generateType(name: string, schema: JSONSchema4): string {
   if (isEnumType(schema)) {
     return generateConstEnum(name, schema)
@@ -69,7 +76,10 @@ function generateType(name: string, schema: JSONSchema4): string {
     return generateInterface(name, schema)
   } else if (isOneOfType(schema)) {
     return generateOneOfType(name, schema)
+  } else if (isArrayType(schema)) {
+    return generateArrayType(name, schema)
   }
+  throw new TypeError(`${name} is of unknown type, cannot be generated`)
 }
 
 export function format(source: string): string {
