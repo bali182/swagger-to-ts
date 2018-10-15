@@ -13,7 +13,7 @@
     "build": "rollup -c rollup.main.config.js",
     "test": "mocha -r ts-node/register test/*.spec.ts",
     "tslint": "tslint -c tslint.json 'src/**/*.ts'",
-    "run-on-sample": "npm run build && node dist/index.js"
+    "on-sample": "npm run build && node dist/index.js"
   },
   "repository": {
     "type": "git",
@@ -32,8 +32,8 @@
   },
   "homepage": "https://github.com/fredfort/avro-typescript#readme",
   "devDependencies": {
+    "@loopback/openapi-v3-types": "^1.0.0",
     "@types/chai": "^4.1.4",
-    "@types/json-schema": "^7.0.1",
     "@types/lodash": "^4.14.116",
     "@types/minimist": "^1.2.0",
     "@types/mocha": "^5.2.5",
