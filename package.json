@@ -32,7 +32,6 @@
   },
   "homepage": "https://github.com/fredfort/avro-typescript#readme",
   "devDependencies": {
-    "@loopback/openapi-v3-types": "^1.0.0",
     "@types/chai": "^4.1.4",
     "@types/lodash": "^4.14.116",
     "@types/minimist": "^1.2.0",
@@ -47,9 +46,11 @@
     "typescript": "^3.0.1"
   },
   "dependencies": {
+    "@loopback/openapi-v3-types": "^1.0.0",
     "constant-case": "^2.0.0",
     "lodash": "^4.17.11",
     "minimist": "^1.2.0",
+    "pascalcase": "^0.1.1",
     "prettier": "^1.14.2"
   }
 }

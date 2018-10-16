@@ -6,7 +6,8 @@
     "declaration": false,
     "outDir": "./dist",
     "noUnusedLocals": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true
   },
   "include": [
     "./src/**/*"
