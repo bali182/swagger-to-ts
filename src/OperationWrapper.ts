@@ -19,14 +19,13 @@ export class OperationWrapper {
   }
   getRequestBodyTypes(): SchemaOrRef[] {
     const types: SchemaOrRef[] = []
-    for (const [, body] of entries(this.operation.requestBody)) {
-      if (isRefType(body)) {
-        types.push(body)
-      } else if (isRequestBody(body)) {
-        for (const [, mediaObj] of entries(body.content)) {
-          if (mediaObj.schema) {
-            types.push(mediaObj.schema)
-          }
+    const { requestBody } = this.operation
+    if (isRefType(requestBody)) {
+      types.push(requestBody)
+    } else if (isRequestBody(requestBody)) {
+      for (const [, mediaObj] of entries(requestBody.content)) {
+        if (mediaObj.schema) {
+          types.push(mediaObj.schema)
         }
       }
     }
@@ -34,7 +33,7 @@ export class OperationWrapper {
   }
   getResponseBodyTypes(): SchemaOrRef[] {
     const types: SchemaOrRef[] = []
-    for (const [, response] of entries(this.operation.responses)) {
+    for (const [, response] of entries(this.operation.responses || {})) {
       if (isRefType(response)) {
         types.push(response)
       } else if (isResponse(response) && response.content) {

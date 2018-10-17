@@ -1,19 +1,22 @@
 import { SchemaObject, OpenApiSpec, OperationObject, PathItemObject } from '@loopback/openapi-v3-types'
 import entries from 'lodash/entries'
-import pascalCase from 'pascalcase'
-
 import { isObjectType, isEnumType, isArrayType, isOneOfType, isAllOfType, isAnyOfType, isPureMapType } from './utils'
 import { TypeWrapper } from './TypeWrapper'
 import { HTTPMethod, OperationWrapper } from './OperationWrapper'
+import { NameProvider } from './NameProvider'
 
 export class TypeRegistry {
   private readonly types: TypeWrapper[] = []
   private readonly operations: OperationWrapper[] = []
   private readonly spec: OpenApiSpec
+  private readonly nameProvider: NameProvider = new NameProvider()
   constructor(spec: OpenApiSpec) {
     this.spec = spec
     this.registerTypes()
     this.registerOperations()
+  }
+  getNameProvider(): NameProvider {
+    return this.nameProvider
   }
   getSpec(): OpenApiSpec {
     return this.spec
@@ -62,29 +65,29 @@ export class TypeRegistry {
     if (bySchema !== undefined) {
       throw new TypeError(`Type for schema "${JSON.stringify(schema, null, 2)}" is already registered!`)
     }
-    this.types.push({ name: pascalCase(name), schema })
+    this.types.push({ name, schema })
   }
   protected registerTypeRecursively(name: string, schema: SchemaObject, force: boolean) {
     if ((force || (isObjectType(schema) && !isPureMapType(schema)) || isEnumType(schema)) && !this.hasSchema(schema)) {
-      this.registerType(name, schema)
+      this.registerType(this.nameProvider.getTypeName(name), schema)
     }
 
     if (isObjectType(schema) && schema.properties) {
       for (const [fieldName, subSchema] of entries(schema.properties)) {
-        this.registerTypeRecursively(`${name}${pascalCase(fieldName)}`, subSchema, false)
+        this.registerTypeRecursively(this.nameProvider.getNestedTypeName(name, fieldName), subSchema, false)
       }
     }
     if (isArrayType(schema) && schema.items) {
-      this.registerTypeRecursively(`${name}ArrayItem`, schema.items, false)
+      this.registerTypeRecursively(this.nameProvider.getNestedItemName(name), schema.items, false)
     }
     if (isOneOfType(schema)) {
-      this.registerTypeRecursively(`${name}OneOf`, schema.oneOf, false)
+      this.registerTypeRecursively(this.nameProvider.getNestedOneOfName(name), schema.oneOf, false)
     }
     if (isAllOfType(schema)) {
-      this.registerTypeRecursively(`${name}AllOf`, schema.allOf, false)
+      this.registerTypeRecursively(this.nameProvider.getNestedAllOfName(name), schema.allOf, false)
     }
     if (isAnyOfType(schema)) {
-      this.registerTypeRecursively(`${name}AnyOf`, schema.anyOf, false)
+      this.registerTypeRecursively(this.nameProvider.getNestedAnyOfName(name), schema.anyOf, false)
     }
   }
   protected registerTypes(): void {

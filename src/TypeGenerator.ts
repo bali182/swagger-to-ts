@@ -1,6 +1,5 @@
 import { SchemaObject } from '@loopback/openapi-v3-types'
 import entries from 'lodash/entries'
-import pascalCase from 'pascalcase'
 import { isEnumType, isObjectType, isArrayType, isOneOfType, isAllOfType, isAnyOfType, isRefType } from './utils'
 import { BaseGenerator } from './BaseGenerator'
 import { SchemaOrRef } from './typings'
@@ -33,8 +32,9 @@ export class TypeGenerator extends BaseGenerator<string> {
 
   generateConstEnum(name: string): string {
     const schema = this.registry.getSchemaByName(name)
+    const np = this.registry.getNameProvider()
     return `export const enum ${name} {
-      ${schema.enum.map((value) => `${pascalCase(value)} = '${value}'`).join(',')}
+      ${schema.enum.map((value) => `${np.getEnumConstantName(value)} = '${value}'`).join(',')}
     }`
   }
 

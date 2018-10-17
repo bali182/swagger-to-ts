@@ -8,6 +8,9 @@ var entries = _interopDefault(require('lodash/entries'));
 var pascalCase = _interopDefault(require('pascalcase'));
 var prettier = _interopDefault(require('prettier'));
 var last = _interopDefault(require('lodash/last'));
+var startsWith = _interopDefault(require('lodash/startsWith'));
+var endsWith = _interopDefault(require('lodash/endsWith'));
+var openapiV3Types = require('@loopback/openapi-v3-types');
 var fs = require('fs');
 var path = require('path');
 
@@ -58,7 +61,7 @@ function isRequestBody(input) {
     return input instanceof Object && Boolean(input.content);
 }
 function isResponse(input) {
-    return input instanceof Object && Boolean(input.description);
+    return input instanceof Object && (Boolean(input.description) || Boolean(input.content));
 }
 
 class OperationWrapper {
@@ -72,15 +75,14 @@ class OperationWrapper {
     }
     getRequestBodyTypes() {
         const types = [];
-        for (const [, body] of entries(this.operation.requestBody)) {
-            if (isRefType(body)) {
-                types.push(body);
-            }
-            else if (isRequestBody(body)) {
-                for (const [, mediaObj] of entries(body.content)) {
-                    if (mediaObj.schema) {
-                        types.push(mediaObj.schema);
-                    }
+        const { requestBody } = this.operation;
+        if (isRefType(requestBody)) {
+            types.push(requestBody);
+        }
+        else if (isRequestBody(requestBody)) {
+            for (const [, mediaObj] of entries(requestBody.content)) {
+                if (mediaObj.schema) {
+                    types.push(mediaObj.schema);
                 }
             }
         }
@@ -88,7 +90,7 @@ class OperationWrapper {
     }
     getResponseBodyTypes() {
         const types = [];
-        for (const [, response] of entries(this.operation.responses)) {
+        for (const [, response] of entries(this.operation.responses || {})) {
             if (isRefType(response)) {
                 types.push(response);
             }
@@ -104,13 +106,44 @@ class OperationWrapper {
     }
 }
 
+class NameProvider {
+    getEnumConstantName(name) {
+        return pascalCase(name);
+    }
+    getTypeName(name) {
+        return pascalCase(name);
+    }
+    getNestedTypeName(parentName, name) {
+        return `${parentName}${pascalCase(name)}`;
+    }
+    getParametersTypeName(operationName) {
+        return `${pascalCase(operationName)}Params`;
+    }
+    getNestedItemName(parentName) {
+        return `${parentName}ArrayItem`;
+    }
+    getNestedOneOfName(parentName) {
+        return `${parentName}OneOf`;
+    }
+    getNestedAnyOfName(parentName) {
+        return `${parentName}AnyOf`;
+    }
+    getNestedAllOfName(parentName) {
+        return `${parentName}AllOf`;
+    }
+}
+
 class TypeRegistry {
     constructor(spec) {
         this.types = [];
         this.operations = [];
+        this.nameProvider = new NameProvider();
         this.spec = spec;
         this.registerTypes();
         this.registerOperations();
+    }
+    getNameProvider() {
+        return this.nameProvider;
     }
     getSpec() {
         return this.spec;
@@ -159,28 +192,28 @@ class TypeRegistry {
         if (bySchema !== undefined) {
             throw new TypeError(`Type for schema "${JSON.stringify(schema, null, 2)}" is already registered!`);
         }
-        this.types.push({ name: pascalCase(name), schema });
+        this.types.push({ name, schema });
     }
     registerTypeRecursively(name, schema, force) {
         if ((force || (isObjectType(schema) && !isPureMapType(schema)) || isEnumType(schema)) && !this.hasSchema(schema)) {
-            this.registerType(name, schema);
+            this.registerType(this.nameProvider.getTypeName(name), schema);
         }
         if (isObjectType(schema) && schema.properties) {
             for (const [fieldName, subSchema] of entries(schema.properties)) {
-                this.registerTypeRecursively(`${name}${pascalCase(fieldName)}`, subSchema, false);
+                this.registerTypeRecursively(this.nameProvider.getNestedTypeName(name, fieldName), subSchema, false);
             }
         }
         if (isArrayType(schema) && schema.items) {
-            this.registerTypeRecursively(`${name}ArrayItem`, schema.items, false);
+            this.registerTypeRecursively(this.nameProvider.getNestedItemName(name), schema.items, false);
         }
         if (isOneOfType(schema)) {
-            this.registerTypeRecursively(`${name}OneOf`, schema.oneOf, false);
+            this.registerTypeRecursively(this.nameProvider.getNestedOneOfName(name), schema.oneOf, false);
         }
         if (isAllOfType(schema)) {
-            this.registerTypeRecursively(`${name}AllOf`, schema.allOf, false);
+            this.registerTypeRecursively(this.nameProvider.getNestedAllOfName(name), schema.allOf, false);
         }
         if (isAnyOfType(schema)) {
-            this.registerTypeRecursively(`${name}AnyOf`, schema.anyOf, false);
+            this.registerTypeRecursively(this.nameProvider.getNestedAnyOfName(name), schema.anyOf, false);
         }
     }
     registerTypes() {
@@ -341,8 +374,9 @@ class TypeGenerator extends BaseGenerator {
     }
     generateConstEnum(name) {
         const schema = this.registry.getSchemaByName(name);
+        const np = this.registry.getNameProvider();
         return `export const enum ${name} {
-      ${schema.enum.map((value) => `${pascalCase(value)} = '${value}'`).join(',')}
+      ${schema.enum.map((value) => `${np.getEnumConstantName(value)} = '${value}'`).join(',')}
     }`;
     }
     generateTypeDeclarationField(name, schema) {
@@ -411,9 +445,169 @@ class TypesGenerator extends BaseGenerator {
     }
 }
 
+class OperationGenerator extends BaseGenerator {
+    constructor(registry) {
+        super(registry);
+        this.refGenerator = new TypeRefGenerator(this.registry);
+    }
+    generateBodyParameter(op) {
+        const reqTypes = op.getRequestBodyTypes();
+        const { refGenerator } = this;
+        switch (reqTypes.length) {
+            case 0:
+                return null;
+            case 1:
+                return `content: ${refGenerator.generate(reqTypes[0])}`;
+            default:
+                return `content: ${refGenerator.generate({ oneOf: reqTypes })}`;
+        }
+    }
+    generateParamsParameter(op) {
+        if (op.operation.parameters && op.operation.parameters.length > 0) {
+            const type = this.registry.getNameProvider().getParametersTypeName(op.getId());
+            return `params: ${type}`;
+        }
+        return null;
+    }
+    generateParameters(op) {
+        const params = [this.generateParamsParameter(op), this.generateBodyParameter(op)];
+        return params.filter((code) => code !== null).join(',');
+    }
+    generateReturnType(op) {
+        return `Promise<${this.generatePromiseInnerType(op)}>`;
+    }
+    generatePromiseInnerType(op) {
+        const resTypes = op.getResponseBodyTypes();
+        const { refGenerator } = this;
+        switch (resTypes.length) {
+            case 0:
+                return `void`;
+            case 1:
+                return refGenerator.generate(resTypes[0]);
+            default:
+                return refGenerator.generate({ oneOf: resTypes });
+        }
+    }
+    generateUrlValue(op) {
+        const segments = op.url.split('/').filter((s) => s.length > 0);
+        const replacedSegments = segments.map((segment) => {
+            if (startsWith(segment, '{') && endsWith(segment, '}')) {
+                const varName = segment.substring(1, segment.length - 1);
+                return `\${params.${varName}}`;
+            }
+            return segment;
+        });
+        const partialUrl = replacedSegments.join('/');
+        return `\`\${this.getBaseUrl()}/${partialUrl}\``;
+    }
+    generateHeadersValue(op) {
+        return `this.getDefaultHeaders()`;
+    }
+    generateBodyValue(op) {
+        const bodyType = this.generateBodyParameter(op);
+        return `${bodyType === null ? 'undefined' : `JSON.stringify(content)`}`;
+    }
+    generateResponseHandler(op) {
+        const resTypes = op.getResponseBodyTypes();
+        switch (resTypes.length) {
+            case 0:
+                return `() => undefined`;
+            default:
+                return `(response) => JSON.parse(response.body) as ${this.generatePromiseInnerType(op)}`;
+        }
+    }
+    generate(id) {
+        const op = this.registry.getOperation(id);
+        return `${id}(${this.generateParameters(op)}): ${this.generateReturnType(op)} {
+      const request: __Request = {
+        url: ${this.generateUrlValue(op)},
+        method: '${op.method.toUpperCase()}',
+        headers: ${this.generateHeadersValue(op)},
+        body: ${this.generateBodyValue(op)},
+      }
+      return this.execute(request).then(${this.generateResponseHandler(op)})
+    }`;
+    }
+}
+
+class ApiGenerator extends BaseGenerator {
+    generate() {
+        const opGenerator = new OperationGenerator(this.registry);
+        const fns = this.registry
+            .getOperationIds()
+            .map((id) => opGenerator.generate(id))
+            .join('\n');
+        return `
+    export type __Request = {
+      url: string
+      method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'OPTIONS' | 'HEAD' | 'PATCH' | 'TRACE'
+      body: string
+      headers: { [key: string]: string }
+    }
+    export type __Response = {
+      // status: number (We don't need it for now)
+      body: string
+    }
+    export abstract class AbstractApi {
+      abstract execute(request: __Request): Promise<__Response>
+      abstract getBaseUrl(): string
+      abstract getDefaultHeaders(): {[key: string]: string}
+      ${fns}
+    }`;
+    }
+}
+
+class ParameterTypeGenerator extends BaseGenerator {
+    constructor(registry) {
+        super(registry);
+        this.refGenerator = new TypeRefGenerator(this.registry);
+    }
+    generateParameterField(param) {
+        if (openapiV3Types.isReferenceObject(param)) {
+            throw new TypeError(`Can't handle this!!!`);
+        }
+        return `${param.name}: ${this.refGenerator.generate(param.schema)}`;
+    }
+    generateParamsType(op) {
+        const name = this.registry.getNameProvider().getParametersTypeName(op.operationId);
+        return `export type ${name} = {
+      ${op.parameters.map((param) => this.generateParameterField(param))}
+    }`;
+    }
+    generate(operationId) {
+        const op = this.registry.getOperation(operationId);
+        if (!op.operation.parameters || op.operation.parameters.length === 0) {
+            return null;
+        }
+        return this.generateParamsType(op.operation);
+    }
+}
+
+class ParameterTypesGenerator extends BaseGenerator {
+    generate() {
+        const generator = new ParameterTypeGenerator(this.registry);
+        return this.registry
+            .getOperationIds()
+            .map((id) => generator.generate(id))
+            .filter((source) => source !== null)
+            .join('\n');
+    }
+}
+
+class RootGenerator extends BaseGenerator {
+    generate() {
+        const generators = [
+            new TypesGenerator(this.registry),
+            new ParameterTypesGenerator(this.registry),
+            new ApiGenerator(this.registry),
+        ];
+        return this.format(generators.map((g) => g.generate()).join('\n'));
+    }
+}
+
 const json = JSON.parse(fs.readFileSync(path.join(__dirname, '../swagger.json'), 'utf-8'));
 const spec = json;
 const registry = new TypeRegistry(spec);
-const generator = new TypesGenerator(registry);
+const generator = new RootGenerator(registry);
 const source = generator.generate();
 fs.writeFileSync(path.join(__dirname, '../output.ts'), source, 'utf-8');

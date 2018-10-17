@@ -56,5 +56,5 @@ export function isRequestBody(input: any): input is RequestBodyObject {
   return input instanceof Object && Boolean(input.content)
 }
 export function isResponse(input: any): input is ResponseObject {
-  return input instanceof Object && Boolean(input.description)
+  return input instanceof Object && (Boolean(input.description) || Boolean(input.content))
 }
