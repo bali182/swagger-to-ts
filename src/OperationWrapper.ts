@@ -1,9 +1,9 @@
-import { OperationObject, SchemaObject, ReferenceObject } from '@loopback/openapi-v3-types'
+import { OperationObject } from '@loopback/openapi-v3-types'
 import entries from 'lodash/entries'
-import { isRefType, isRequestBody } from './utils'
+import { isRefType, isRequestBody, isResponse } from './utils'
+import { SchemaOrRef } from './typings'
 
 export type HTTPMethod = 'get' | 'put' | 'post' | 'delete' | 'options' | 'head' | 'patch' | 'trace'
-export type SchemaOrRef = SchemaObject | ReferenceObject
 
 export class OperationWrapper {
   public readonly url: string
@@ -24,6 +24,21 @@ export class OperationWrapper {
         types.push(body)
       } else if (isRequestBody(body)) {
         for (const [, mediaObj] of entries(body.content)) {
+          if (mediaObj.schema) {
+            types.push(mediaObj.schema)
+          }
+        }
+      }
+    }
+    return types
+  }
+  getResponseBodyTypes(): SchemaOrRef[] {
+    const types: SchemaOrRef[] = []
+    for (const [, response] of entries(this.operation.responses)) {
+      if (isRefType(response)) {
+        types.push(response)
+      } else if (isResponse(response) && response.content) {
+        for (const [, mediaObj] of entries(response.content)) {
           if (mediaObj.schema) {
             types.push(mediaObj.schema)
           }

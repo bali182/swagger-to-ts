@@ -1,23 +1,18 @@
-import { SchemaObject, ReferenceObject } from '@loopback/openapi-v3-types'
-import {
-  isEnumType,
-  isObjectType,
-  isArrayType,
-  isSimpleType,
-  isOneOfType,
-  isAllOfType,
-  isAnyOfType,
-  isSchemaType,
-  isRefType,
-  isPureMapType,
-} from './utils'
-import { BaseGenerator } from './BaseGenerator'
-import last from 'lodash/last'
+import { SchemaObject } from '@loopback/openapi-v3-types'
 import entries from 'lodash/entries'
 import pascalCase from 'pascalcase'
-import { SchemaOrRef } from './OperationWrapper'
+import { isEnumType, isObjectType, isArrayType, isOneOfType, isAllOfType, isAnyOfType, isRefType } from './utils'
+import { BaseGenerator } from './BaseGenerator'
+import { SchemaOrRef } from './typings'
+import { TypeRegistry } from './TypeRegistry'
+import { TypeRefGenerator } from './TypeRefGenerator'
 
 export class TypeGenerator extends BaseGenerator<string> {
+  private readonly typeRefGenerator: TypeRefGenerator
+  constructor(registry: TypeRegistry) {
+    super(registry)
+    this.typeRefGenerator = new TypeRefGenerator(registry)
+  }
   generate(name: string): string {
     const schema = this.registry.getSchemaByName(name)
     if (isEnumType(schema)) {
@@ -43,90 +38,25 @@ export class TypeGenerator extends BaseGenerator<string> {
     }`
   }
 
-  refToTypeName(ref: string): string {
-    const name = pascalCase(last(ref.split('/')))
-    this.registry.getSchemaByName(name)
-    return name
+  generateTypeDeclarationField(name: string, schema: SchemaOrRef): string {
+    return `${name}:${this.typeRefGenerator.generate(schema)}`
   }
 
-  getPrimitiveFieldType(schema: SchemaObject): string {
-    if (schema === null || schema === undefined) {
-      return 'any'
-    }
-    switch (schema.type) {
-      case 'string':
-        return 'string'
-      case 'boolean':
-        return 'boolean'
-      case 'number':
-      case 'integer':
-        return 'number'
-      case 'null':
-        return 'null'
-      case 'any':
-        return 'any'
-    }
-  }
-
-  generateFieldType(schema: SchemaObject | ReferenceObject): string {
-    if (schema === null || schema === undefined) {
-      return 'any'
-    }
-    if (isSchemaType(schema)) {
-      if (this.registry.hasSchema(schema)) {
-        return this.registry.getNameBySchema(schema)
-      } else if (isSimpleType(schema)) {
-        return this.getPrimitiveFieldType(schema)
-      } else if (isPureMapType(schema)) {
-        return this.generateAdditionalProperties(schema.additionalProperties)
-      } else if (isArrayType(schema)) {
-        return `${this.generateArrayItemsType(schema.items)}[]`
-      } else if (isOneOfType(schema)) {
-        return schema.oneOf.map((e) => this.generateFieldType(e)).join('|')
-      } else if (isAllOfType(schema)) {
-        return schema.allOf.map((e) => this.generateFieldType(e)).join('&')
-      } else if (isAnyOfType(schema)) {
-        return schema.anyOf.map((e) => this.generateFieldType(e)).join('|') // TODO
-      }
-    }
-    if (isRefType(schema)) {
-      return this.refToTypeName(schema.$ref)
-    }
-    throw new TypeError(`${JSON.stringify(schema)} is of unknown type, cannot be generated`)
-  }
-
-  generateArrayItemsType(schema: SchemaOrRef): string {
-    return isSchemaType(schema) && isOneOfType(schema) && schema.oneOf.length > 1
-      ? `(${this.generateFieldType(schema)})`
-      : this.generateFieldType(schema)
-  }
-
-  generateInterfaceField(name: string, schema: SchemaObject | ReferenceObject): string {
-    return `${name}:${this.generateFieldType(schema)}`
-  }
-
-  generateInterfaceFields(schema: SchemaObject): string {
+  generateTypeDeclarationFields(schema: SchemaObject): string {
     return entries(schema || {})
-      .map(([name, subSchema]) => this.generateInterfaceField(name, subSchema))
+      .map(([name, subSchema]) => this.generateTypeDeclarationField(name, subSchema))
       .join(';\n')
   }
 
-  generateAdditionalProperties(schema: boolean | SchemaObject | ReferenceObject) {
-    if (typeof schema === 'boolean') {
-      return schema ? `{[key: string]: any}` : `{[key: string]: never}`
-    }
-    return `{[key: string]: ${this.generateFieldType(schema)}}`
-  }
-
   generateTypeBody(schema: SchemaObject): string {
-    return `{${this.generateInterfaceFields(schema.properties)}}`
+    return `{${this.generateTypeDeclarationFields(schema.properties)}}`
   }
 
   getIntersectionTypes(name: string): string[] {
     const schema = this.registry.getSchemaByName(name)
     const types: string[] = []
     if (schema.allOf && schema.allOf.length > 0 && schema.allOf.every(isRefType)) {
-      schema.allOf.forEach((t) => types.push(this.refToTypeName(t.$ref)))
+      schema.allOf.forEach((t) => types.push(this.typeRefGenerator.generate(t)))
     }
     return types
   }
@@ -136,7 +66,7 @@ export class TypeGenerator extends BaseGenerator<string> {
     const iss = this.getIntersectionTypes(name)
 
     if (schema.additionalProperties) {
-      const mapDef = this.generateAdditionalProperties(schema.additionalProperties)
+      const mapDef = this.typeRefGenerator.generateMapType(schema.additionalProperties)
       return `export type ${name} = ${mapDef} // TODO not fully expressible, "properties" omitted`
     }
     if (iss.length === 0) {
@@ -149,24 +79,24 @@ export class TypeGenerator extends BaseGenerator<string> {
 
   generateAnyOfType(name: string): string {
     const schema = this.registry.getSchemaByName(name)
-    const types = schema.anyOf.map((e) => this.generateFieldType(e)).join('|')
+    const types = schema.anyOf.map((e) => this.typeRefGenerator.generate(e)).join('|')
     return `export type ${name} = ${types}`
   }
 
   generateOneOfType(name: string): string {
     const schema = this.registry.getSchemaByName(name)
-    const types = schema.oneOf.map((e) => this.generateFieldType(e)).join('|')
+    const types = schema.oneOf.map((e) => this.typeRefGenerator.generate(e)).join('|')
     return `export type ${name} = ${types}`
   }
 
   generateAllOfType(name: string): string {
     const schema = this.registry.getSchemaByName(name)
-    const types = schema.allOf.map((e) => this.generateFieldType(e)).join('&')
+    const types = schema.allOf.map((e) => this.typeRefGenerator.generate(e)).join('&')
     return `export type ${name} = ${types}`
   }
 
   generateArrayType(name: string): string {
     const schema = this.registry.getSchemaByName(name)
-    return `export type ${name} = ${this.generateArrayItemsType(schema.items)}[]`
+    return `export type ${name} = ${this.typeRefGenerator.generateItemsType(schema.items)}[]`
   }
 }

@@ -1,4 +1,4 @@
-import { SchemaObject, ReferenceObject, RequestBodyObject } from '@loopback/openapi-v3-types'
+import { SchemaObject, ReferenceObject, RequestBodyObject, ResponseObject } from '@loopback/openapi-v3-types'
 import keys from 'lodash/keys'
 import isNil from 'lodash/isNil'
 
@@ -54,4 +54,7 @@ export function isSchemaType(input: any): input is SchemaObject {
 }
 export function isRequestBody(input: any): input is RequestBodyObject {
   return input instanceof Object && Boolean(input.content)
+}
+export function isResponse(input: any): input is ResponseObject {
+  return input instanceof Object && Boolean(input.description)
 }

@@ -57,6 +57,9 @@ function isSchemaType(input) {
 function isRequestBody(input) {
     return input instanceof Object && Boolean(input.content);
 }
+function isResponse(input) {
+    return input instanceof Object && Boolean(input.description);
+}
 
 class OperationWrapper {
     constructor(url, method, operation) {
@@ -75,6 +78,22 @@ class OperationWrapper {
             }
             else if (isRequestBody(body)) {
                 for (const [, mediaObj] of entries(body.content)) {
+                    if (mediaObj.schema) {
+                        types.push(mediaObj.schema);
+                    }
+                }
+            }
+        }
+        return types;
+    }
+    getResponseBodyTypes() {
+        const types = [];
+        for (const [, response] of entries(this.operation.responses)) {
+            if (isRefType(response)) {
+                types.push(response);
+            }
+            else if (isResponse(response) && response.content) {
+                for (const [, mediaObj] of entries(response.content)) {
                     if (mediaObj.schema) {
                         types.push(mediaObj.schema);
                     }
@@ -206,7 +225,98 @@ class BaseGenerator {
     }
 }
 
+class TypeRefGenerator extends BaseGenerator {
+    generate(schema) {
+        if (schema === null || schema === undefined) {
+            return this.generatePrimitiveType(schema);
+        }
+        if (isRefType(schema)) {
+            return this.generateRefType(schema);
+        }
+        if (isSchemaType(schema)) {
+            if (this.registry.hasSchema(schema)) {
+                return this.generateRootType(schema);
+            }
+            else if (isSimpleType(schema)) {
+                return this.generatePrimitiveType(schema);
+            }
+            else if (isPureMapType(schema)) {
+                return this.generateMapType(schema.additionalProperties);
+            }
+            else if (isArrayType(schema)) {
+                return this.generateArrayType(schema);
+            }
+            else if (isOneOfType(schema)) {
+                return this.generateOneOfType(schema);
+            }
+            else if (isAllOfType(schema)) {
+                return this.generateAllOfType(schema);
+            }
+            else if (isAnyOfType(schema)) {
+                return this.generateAnyOfType(schema);
+            }
+        }
+        throw new TypeError(`${JSON.stringify(schema)} is of unknown type, cannot be generated`);
+    }
+    generateOneOfType(schema) {
+        return this.generateCompositeSchema(schema.oneOf, '|');
+    }
+    generateAnyOfType(schema) {
+        return this.generateCompositeSchema(schema.anyOf, '|');
+    }
+    generateAllOfType(schema) {
+        return this.generateCompositeSchema(schema.allOf, '&');
+    }
+    generateCompositeSchema(schemas, glue) {
+        return schemas.map((e) => this.generate(e)).join(glue);
+    }
+    generateRefType(ref) {
+        const name = pascalCase(last(ref.$ref.split('/')));
+        this.registry.getSchemaByName(name);
+        return name;
+    }
+    generateMapType(schema) {
+        if (typeof schema === 'boolean') {
+            return schema ? `{[key: string]: any}` : `{[key: string]: never}`;
+        }
+        return `{[key: string]: ${this.generate(schema)}}`;
+    }
+    generateItemsType(schema) {
+        return isSchemaType(schema) && isOneOfType(schema) && schema.oneOf.length > 1
+            ? `(${this.generate(schema)})`
+            : this.generate(schema);
+    }
+    generateArrayType(schema) {
+        return `${this.generateItemsType(schema.items)}[]`;
+    }
+    generatePrimitiveType(schema) {
+        if (schema === null || schema === undefined) {
+            return 'any';
+        }
+        switch (schema.type) {
+            case 'string':
+                return 'string';
+            case 'boolean':
+                return 'boolean';
+            case 'number':
+            case 'integer':
+                return 'number';
+            case 'null':
+                return 'null';
+            case 'any':
+                return 'any';
+        }
+    }
+    generateRootType(schema) {
+        return this.registry.getNameBySchema(schema);
+    }
+}
+
 class TypeGenerator extends BaseGenerator {
+    constructor(registry) {
+        super(registry);
+        this.typeRefGenerator = new TypeRefGenerator(registry);
+    }
     generate(name) {
         const schema = this.registry.getSchemaByName(name);
         if (isEnumType(schema)) {
@@ -235,88 +345,22 @@ class TypeGenerator extends BaseGenerator {
       ${schema.enum.map((value) => `${pascalCase(value)} = '${value}'`).join(',')}
     }`;
     }
-    refToTypeName(ref) {
-        const name = pascalCase(last(ref.split('/')));
-        this.registry.getSchemaByName(name);
-        return name;
+    generateTypeDeclarationField(name, schema) {
+        return `${name}:${this.typeRefGenerator.generate(schema)}`;
     }
-    getPrimitiveFieldType(schema) {
-        if (schema === null || schema === undefined) {
-            return 'any';
-        }
-        switch (schema.type) {
-            case 'string':
-                return 'string';
-            case 'boolean':
-                return 'boolean';
-            case 'number':
-            case 'integer':
-                return 'number';
-            case 'null':
-                return 'null';
-            case 'any':
-                return 'any';
-        }
-    }
-    generateFieldType(schema) {
-        if (schema === null || schema === undefined) {
-            return 'any';
-        }
-        if (isSchemaType(schema)) {
-            if (this.registry.hasSchema(schema)) {
-                return this.registry.getNameBySchema(schema);
-            }
-            else if (isSimpleType(schema)) {
-                return this.getPrimitiveFieldType(schema);
-            }
-            else if (isPureMapType(schema)) {
-                return this.generateAdditionalProperties(schema.additionalProperties);
-            }
-            else if (isArrayType(schema)) {
-                return `${this.generateArrayItemsType(schema.items)}[]`;
-            }
-            else if (isOneOfType(schema)) {
-                return schema.oneOf.map((e) => this.generateFieldType(e)).join('|');
-            }
-            else if (isAllOfType(schema)) {
-                return schema.allOf.map((e) => this.generateFieldType(e)).join('&');
-            }
-            else if (isAnyOfType(schema)) {
-                return schema.anyOf.map((e) => this.generateFieldType(e)).join('|'); // TODO
-            }
-        }
-        if (isRefType(schema)) {
-            return this.refToTypeName(schema.$ref);
-        }
-        throw new TypeError(`${JSON.stringify(schema)} is of unknown type, cannot be generated`);
-    }
-    generateArrayItemsType(schema) {
-        return isSchemaType(schema) && isOneOfType(schema) && schema.oneOf.length > 1
-            ? `(${this.generateFieldType(schema)})`
-            : this.generateFieldType(schema);
-    }
-    generateInterfaceField(name, schema) {
-        return `${name}:${this.generateFieldType(schema)}`;
-    }
-    generateInterfaceFields(schema) {
+    generateTypeDeclarationFields(schema) {
         return entries(schema || {})
-            .map(([name, subSchema]) => this.generateInterfaceField(name, subSchema))
+            .map(([name, subSchema]) => this.generateTypeDeclarationField(name, subSchema))
             .join(';\n');
     }
-    generateAdditionalProperties(schema) {
-        if (typeof schema === 'boolean') {
-            return schema ? `{[key: string]: any}` : `{[key: string]: never}`;
-        }
-        return `{[key: string]: ${this.generateFieldType(schema)}}`;
-    }
     generateTypeBody(schema) {
-        return `{${this.generateInterfaceFields(schema.properties)}}`;
+        return `{${this.generateTypeDeclarationFields(schema.properties)}}`;
     }
     getIntersectionTypes(name) {
         const schema = this.registry.getSchemaByName(name);
         const types = [];
         if (schema.allOf && schema.allOf.length > 0 && schema.allOf.every(isRefType)) {
-            schema.allOf.forEach((t) => types.push(this.refToTypeName(t.$ref)));
+            schema.allOf.forEach((t) => types.push(this.typeRefGenerator.generate(t)));
         }
         return types;
     }
@@ -324,7 +368,7 @@ class TypeGenerator extends BaseGenerator {
         const schema = this.registry.getSchemaByName(name);
         const iss = this.getIntersectionTypes(name);
         if (schema.additionalProperties) {
-            const mapDef = this.generateAdditionalProperties(schema.additionalProperties);
+            const mapDef = this.typeRefGenerator.generateMapType(schema.additionalProperties);
             return `export type ${name} = ${mapDef} // TODO not fully expressible, "properties" omitted`;
         }
         if (iss.length === 0) {
@@ -337,22 +381,22 @@ class TypeGenerator extends BaseGenerator {
     }
     generateAnyOfType(name) {
         const schema = this.registry.getSchemaByName(name);
-        const types = schema.anyOf.map((e) => this.generateFieldType(e)).join('|');
+        const types = schema.anyOf.map((e) => this.typeRefGenerator.generate(e)).join('|');
         return `export type ${name} = ${types}`;
     }
     generateOneOfType(name) {
         const schema = this.registry.getSchemaByName(name);
-        const types = schema.oneOf.map((e) => this.generateFieldType(e)).join('|');
+        const types = schema.oneOf.map((e) => this.typeRefGenerator.generate(e)).join('|');
         return `export type ${name} = ${types}`;
     }
     generateAllOfType(name) {
         const schema = this.registry.getSchemaByName(name);
-        const types = schema.allOf.map((e) => this.generateFieldType(e)).join('&');
+        const types = schema.allOf.map((e) => this.typeRefGenerator.generate(e)).join('&');
         return `export type ${name} = ${types}`;
     }
     generateArrayType(name) {
         const schema = this.registry.getSchemaByName(name);
-        return `export type ${name} = ${this.generateArrayItemsType(schema.items)}[]`;
+        return `export type ${name} = ${this.typeRefGenerator.generateItemsType(schema.items)}[]`;
     }
 }
 
