@@ -4,7 +4,7 @@ import { OpenApiSpec } from '@loopback/openapi-v3-types'
 import { TypeRegistry } from './TypeRegistry'
 import { TypesGenerator } from './TypesGenerator'
 
-const json = JSON.parse(readFileSync(join(__dirname, '../schema.json'), 'utf-8'))
+const json = JSON.parse(readFileSync(join(__dirname, '../swagger.json'), 'utf-8'))
 
 const spec = json as OpenApiSpec
 const registry = new TypeRegistry(spec)

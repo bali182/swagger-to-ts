@@ -1,19 +1,19 @@
-import { SchemaObject, OpenApiSpec } from '@loopback/openapi-v3-types'
-import { isObjectType, isEnumType, isArrayType, isOneOfType, isAllOfType, isAnyOfType, isPureMapType } from './utils'
+import { SchemaObject, OpenApiSpec, OperationObject, PathItemObject } from '@loopback/openapi-v3-types'
 import entries from 'lodash/entries'
 import pascalCase from 'pascalcase'
 
-export type TypeWrapper = {
-  name: string
-  schema: SchemaObject
-}
+import { isObjectType, isEnumType, isArrayType, isOneOfType, isAllOfType, isAnyOfType, isPureMapType } from './utils'
+import { TypeWrapper } from './TypeWrapper'
+import { HTTPMethod, OperationWrapper } from './OperationWrapper'
 
 export class TypeRegistry {
   private readonly types: TypeWrapper[] = []
+  private readonly operations: OperationWrapper[] = []
   private readonly spec: OpenApiSpec
   constructor(spec: OpenApiSpec) {
     this.spec = spec
-    this.registerAll()
+    this.registerTypes()
+    this.registerOperations()
   }
   getSpec(): OpenApiSpec {
     return this.spec
@@ -23,6 +23,15 @@ export class TypeRegistry {
   }
   getTypeNames(): string[] {
     return this.types.map(({ name }) => name)
+  }
+  getOperations(): OperationWrapper[] {
+    return this.operations
+  }
+  getOperation(id: string): OperationWrapper {
+    return this.getOperations().find(({ operation }) => operation.operationId === id)
+  }
+  getOperationIds(): string[] {
+    return this.getOperations().map(({ operation }) => operation.operationId)
   }
   hasSchemaName(name: string): boolean {
     return this.types.find(({ name: n }) => n === name) !== undefined
@@ -53,10 +62,7 @@ export class TypeRegistry {
     if (bySchema !== undefined) {
       throw new TypeError(`Type for schema "${JSON.stringify(schema, null, 2)}" is already registered!`)
     }
-    this.types.push({
-      name: pascalCase(name),
-      schema,
-    })
+    this.types.push({ name: pascalCase(name), schema })
   }
   protected registerTypeRecursively(name: string, schema: SchemaObject, force: boolean) {
     if ((force || (isObjectType(schema) && !isPureMapType(schema)) || isEnumType(schema)) && !this.hasSchema(schema)) {
@@ -81,9 +87,25 @@ export class TypeRegistry {
       this.registerTypeRecursively(`${name}AnyOf`, schema.anyOf, false)
     }
   }
-  protected registerAll(): void {
+  protected registerTypes(): void {
     for (const [name, schema] of entries(this.spec.components.schemas)) {
       this.registerTypeRecursively(name, schema, true)
+    }
+  }
+  protected registerOperation(url: string, method: HTTPMethod, operation: OperationObject): void {
+    this.operations.push(new OperationWrapper(url, method, operation))
+  }
+  protected registerOperations() {
+    for (const [url, path] of entries(this.getSpec().paths)) {
+      const { get, put, post, delete: _delete, options, head, patch, trace } = path as PathItemObject
+      get ? this.registerOperation(url, 'get', get) : null
+      put ? this.registerOperation(url, 'put', put) : null
+      post ? this.registerOperation(url, 'post', post) : null
+      _delete ? this.registerOperation(url, 'delete', _delete) : null
+      options ? this.registerOperation(url, 'options', options) : null
+      head ? this.registerOperation(url, 'head', head) : null
+      patch ? this.registerOperation(url, 'patch', patch) : null
+      trace ? this.registerOperation(url, 'trace', trace) : null
     }
   }
 }

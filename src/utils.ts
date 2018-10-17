@@ -1,8 +1,12 @@
-import { SchemaObject, ReferenceObject } from '@loopback/openapi-v3-types'
+import { SchemaObject, ReferenceObject, RequestBodyObject } from '@loopback/openapi-v3-types'
 import keys from 'lodash/keys'
+import isNil from 'lodash/isNil'
 
 export function isObjectType(input: SchemaObject): boolean {
-  return (input instanceof Object && input.type === 'object') || Boolean(input.properties)
+  if (!(input instanceof Object)) {
+    return false
+  }
+  return input.type === 'object' || (isNil(input.type) && Boolean(input.properties))
 }
 export function isMapType(input: SchemaObject): boolean {
   return input instanceof Object && input.type === 'object' && Boolean(input.additionalProperties)
@@ -42,9 +46,12 @@ export function isAnyOfType(input: any): boolean {
 export function isAllOfType(input: any): boolean {
   return Boolean(input.allOf)
 }
-export function isRefType(input: SchemaObject | ReferenceObject): input is ReferenceObject {
+export function isRefType(input: any): input is ReferenceObject {
   return input instanceof Object && Boolean(input.$ref)
 }
-export function isSchemaType(input: SchemaObject | ReferenceObject): input is SchemaObject {
+export function isSchemaType(input: any): input is SchemaObject {
   return input instanceof Object && !Boolean(input.$ref)
+}
+export function isRequestBody(input: any): input is RequestBodyObject {
+  return input instanceof Object && Boolean(input.content)
 }

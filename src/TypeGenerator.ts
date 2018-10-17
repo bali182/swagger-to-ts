@@ -15,12 +15,15 @@ import { BaseGenerator } from './BaseGenerator'
 import last from 'lodash/last'
 import entries from 'lodash/entries'
 import pascalCase from 'pascalcase'
+import { SchemaOrRef } from './OperationWrapper'
 
 export class TypeGenerator extends BaseGenerator<string> {
   generate(name: string): string {
     const schema = this.registry.getSchemaByName(name)
     if (isEnumType(schema)) {
       return this.generateConstEnum(name)
+    } else if (isArrayType(schema)) {
+      return this.generateArrayType(name)
     } else if (isObjectType(schema)) {
       return this.generateTypeDeclaration(name)
     } else if (isOneOfType(schema)) {
@@ -29,8 +32,6 @@ export class TypeGenerator extends BaseGenerator<string> {
       return this.generateAllOfType(name)
     } else if (isAnyOfType(schema)) {
       return this.generateAnyOfType(name)
-    } else if (isArrayType(schema)) {
-      return this.generateArrayType(name)
     }
     throw new TypeError(`${name} is of unknown type, cannot be generated`)
   }
@@ -79,12 +80,7 @@ export class TypeGenerator extends BaseGenerator<string> {
       } else if (isPureMapType(schema)) {
         return this.generateAdditionalProperties(schema.additionalProperties)
       } else if (isArrayType(schema)) {
-        const { items } = schema
-        const itemsType =
-          isSchemaType(items) && isOneOfType(items) && items.oneOf.length > 1
-            ? `(${this.generateFieldType(items)})`
-            : this.generateFieldType(items)
-        return `${itemsType}[]`
+        return `${this.generateArrayItemsType(schema.items)}[]`
       } else if (isOneOfType(schema)) {
         return schema.oneOf.map((e) => this.generateFieldType(e)).join('|')
       } else if (isAllOfType(schema)) {
@@ -97,6 +93,12 @@ export class TypeGenerator extends BaseGenerator<string> {
       return this.refToTypeName(schema.$ref)
     }
     throw new TypeError(`${JSON.stringify(schema)} is of unknown type, cannot be generated`)
+  }
+
+  generateArrayItemsType(schema: SchemaOrRef): string {
+    return isSchemaType(schema) && isOneOfType(schema) && schema.oneOf.length > 1
+      ? `(${this.generateFieldType(schema)})`
+      : this.generateFieldType(schema)
   }
 
   generateInterfaceField(name: string, schema: SchemaObject | ReferenceObject): string {
@@ -165,6 +167,6 @@ export class TypeGenerator extends BaseGenerator<string> {
 
   generateArrayType(name: string): string {
     const schema = this.registry.getSchemaByName(name)
-    return `export type ${name} = ${this.generateFieldType(schema)}`
+    return `export type ${name} = ${this.generateArrayItemsType(schema.items)}[]`
   }
 }

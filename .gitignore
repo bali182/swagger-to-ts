@@ -65,4 +65,5 @@ input.avsc
 output.ts
 package-lock.json
 schema.json
+swagger.json
 .DS_Store
