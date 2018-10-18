@@ -1,5 +1,5 @@
 # Usage
 
-1. Clone & `npm install`
-2. Copy the `swagger.json` file you want to test in the root of the project (next to `package.json`)
-3. `npm run on-sample` - this will produce `output.ts` in the root of the project (next to `package.json`)
+1. `npm install --save-dev bali182/swagger-to-ts`
+2. Add npm script (or install globally `-g`): `swag -f swagger.json > output.ts`
+3. Done ✅
