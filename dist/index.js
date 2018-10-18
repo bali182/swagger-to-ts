@@ -13,7 +13,6 @@ var prettier = _interopDefault(require('prettier'));
 var last = _interopDefault(require('lodash/last'));
 var startsWith = _interopDefault(require('lodash/startsWith'));
 var endsWith = _interopDefault(require('lodash/endsWith'));
-var openapiV3Types = require('@loopback/openapi-v3-types');
 
 function isObjectType(input) {
     if (!(input instanceof Object)) {
@@ -602,7 +601,7 @@ class ParameterTypeGenerator extends BaseGenerator {
         this.refGenerator = new TypeRefGenerator(this.registry);
     }
     generateParameterField(param) {
-        if (openapiV3Types.isReferenceObject(param)) {
+        if (isRefType(param)) {
             throw new TypeError(`Can't handle this!!!`);
         }
         const colon = param.required ? ':' : '?:';

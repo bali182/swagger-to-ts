@@ -3,7 +3,7 @@ import { TypeRegistry } from './TypeRegistry'
 import { TypeRefGenerator } from './TypeRefGenerator'
 import { OperationObject } from 'openapi3-ts'
 import { RefOrParameter } from './typings'
-import { isReferenceObject } from '@loopback/openapi-v3-types'
+import { isRefType } from './utils'
 
 export class ParameterTypeGenerator extends BaseGenerator<string> {
   private readonly refGenerator: TypeRefGenerator
@@ -13,7 +13,7 @@ export class ParameterTypeGenerator extends BaseGenerator<string> {
   }
 
   generateParameterField(param: RefOrParameter): string {
-    if (isReferenceObject(param)) {
+    if (isRefType(param)) {
       throw new TypeError(`Can't handle this!!!`)
     }
     const colon = param.required ? ':' : '?:'
