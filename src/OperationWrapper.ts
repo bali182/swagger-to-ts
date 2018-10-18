@@ -31,7 +31,7 @@ export class OperationWrapper {
     }
     return types
   }
-  getResponseBodyTypes(): SchemaOrRef[] {
+  getResponseTypes(): SchemaOrRef[] {
     const types: SchemaOrRef[] = []
     for (const [, response] of entries(this.operation.responses || {})) {
       if (isRefType(response)) {

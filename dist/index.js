@@ -6,6 +6,7 @@ var keys = _interopDefault(require('lodash/keys'));
 var isNil = _interopDefault(require('lodash/isNil'));
 var entries = _interopDefault(require('lodash/entries'));
 var pascalCase = _interopDefault(require('pascalcase'));
+var camelCase = _interopDefault(require('camel-case'));
 var prettier = _interopDefault(require('prettier'));
 var last = _interopDefault(require('lodash/last'));
 var startsWith = _interopDefault(require('lodash/startsWith'));
@@ -88,7 +89,7 @@ class OperationWrapper {
         }
         return types;
     }
-    getResponseBodyTypes() {
+    getResponseTypes() {
         const types = [];
         for (const [, response] of entries(this.operation.responses || {})) {
             if (isRefType(response)) {
@@ -119,17 +120,35 @@ class NameProvider {
     getParametersTypeName(operationName) {
         return `${pascalCase(operationName)}Params`;
     }
+    getParameterTypeName(operationName, paramName) {
+        return `${this.getParametersTypeName(operationName)}${pascalCase(paramName)}`;
+    }
     getNestedItemName(parentName) {
         return `${parentName}ArrayItem`;
     }
-    getNestedOneOfName(parentName) {
-        return `${parentName}OneOf`;
+    getNestedOneOfName(parentName, no) {
+        return `${parentName}OneOf${no}`;
     }
-    getNestedAnyOfName(parentName) {
-        return `${parentName}AnyOf`;
+    getNestedAnyOfName(parentName, no) {
+        return `${parentName}AnyOf${no}`;
     }
-    getNestedAllOfName(parentName) {
-        return `${parentName}AllOf`;
+    getNestedAllOfName(parentName, no) {
+        return `${parentName}AllOf${no}`;
+    }
+    getRequestBodyTypeName(operationName, method) {
+        return `${pascalCase(operationName)}${pascalCase(method)}RequestBody`;
+    }
+    getResponseTypeName(operationName, method) {
+        return `${pascalCase(operationName)}${pascalCase(method)}Response`;
+    }
+    getApiTypeName() {
+        return 'Api';
+    }
+    getApiImplName() {
+        return 'BaseApiImpl';
+    }
+    getOperatioName(id) {
+        return camelCase(id);
     }
 }
 
@@ -139,8 +158,8 @@ class TypeRegistry {
         this.operations = [];
         this.nameProvider = new NameProvider();
         this.spec = spec;
-        this.registerTypes();
         this.registerOperations();
+        this.registerTypes();
     }
     getNameProvider() {
         return this.nameProvider;
@@ -207,18 +226,31 @@ class TypeRegistry {
             this.registerTypeRecursively(this.nameProvider.getNestedItemName(name), schema.items, false);
         }
         if (isOneOfType(schema)) {
-            this.registerTypeRecursively(this.nameProvider.getNestedOneOfName(name), schema.oneOf, false);
+            schema.oneOf.forEach((child, index) => this.registerTypeRecursively(this.nameProvider.getNestedOneOfName(name, index), child, false));
         }
         if (isAllOfType(schema)) {
-            this.registerTypeRecursively(this.nameProvider.getNestedAllOfName(name), schema.allOf, false);
+            schema.allOf.forEach((child, index) => this.registerTypeRecursively(this.nameProvider.getNestedAllOfName(name, index), child, false));
         }
         if (isAnyOfType(schema)) {
-            this.registerTypeRecursively(this.nameProvider.getNestedAnyOfName(name), schema.anyOf, false);
+            schema.anyOf.forEach((child, index) => this.registerTypeRecursively(this.nameProvider.getNestedAnyOfName(name, index), child, false));
         }
     }
     registerTypes() {
         for (const [name, schema] of entries(this.spec.components.schemas)) {
             this.registerTypeRecursively(name, schema, true);
+        }
+        for (const op of this.getOperations()) {
+            for (const param of op.operation.parameters || []) {
+                if (!isRefType(param) && param.schema) {
+                    this.registerTypeRecursively(this.nameProvider.getParameterTypeName(op.getId(), param.name), param.schema, false);
+                }
+            }
+            for (const schema of op.getRequestBodyTypes()) {
+                this.registerTypeRecursively(this.nameProvider.getRequestBodyTypeName(op.getId(), op.method), schema, false);
+            }
+            for (const schema of op.getResponseTypes()) {
+                this.registerTypeRecursively(this.nameProvider.getResponseTypeName(op.getId(), op.method), schema, false);
+            }
         }
     }
     registerOperation(url, method, operation) {
@@ -445,7 +477,7 @@ class TypesGenerator extends BaseGenerator {
     }
 }
 
-class OperationGenerator extends BaseGenerator {
+class OperationSignatureGenerator extends BaseGenerator {
     constructor(registry) {
         super(registry);
         this.refGenerator = new TypeRefGenerator(this.registry);
@@ -477,7 +509,7 @@ class OperationGenerator extends BaseGenerator {
         return `Promise<${this.generatePromiseInnerType(op)}>`;
     }
     generatePromiseInnerType(op) {
-        const resTypes = op.getResponseBodyTypes();
+        const resTypes = op.getResponseTypes();
         const { refGenerator } = this;
         switch (resTypes.length) {
             case 0:
@@ -487,6 +519,18 @@ class OperationGenerator extends BaseGenerator {
             default:
                 return refGenerator.generate({ oneOf: resTypes });
         }
+    }
+    generate(id) {
+        const op = this.registry.getOperation(id);
+        const name = this.registry.getNameProvider().getOperatioName(id);
+        return `${name}(${this.generateParameters(op)}): ${this.generateReturnType(op)}`;
+    }
+}
+
+class OperationGenerator extends BaseGenerator {
+    constructor(registry) {
+        super(registry);
+        this.signatureGenerator = new OperationSignatureGenerator(this.registry);
     }
     generateUrlValue(op) {
         const segments = op.url.split('/').filter((s) => s.length > 0);
@@ -504,51 +548,43 @@ class OperationGenerator extends BaseGenerator {
         return `this.getDefaultHeaders()`;
     }
     generateBodyValue(op) {
-        const bodyType = this.generateBodyParameter(op);
+        const bodyType = this.signatureGenerator.generateBodyParameter(op);
         return `${bodyType === null ? 'undefined' : `JSON.stringify(content)`}`;
     }
     generateResponseHandler(op) {
-        const resTypes = op.getResponseBodyTypes();
+        const resTypes = op.getResponseTypes();
         switch (resTypes.length) {
             case 0:
                 return `() => undefined`;
             default:
-                return `(response) => JSON.parse(response.body) as ${this.generatePromiseInnerType(op)}`;
+                return `(response) => JSON.parse(response.body) as ${this.signatureGenerator.generatePromiseInnerType(op)}`;
         }
     }
-    generate(id) {
-        const op = this.registry.getOperation(id);
-        return `${id}(${this.generateParameters(op)}): ${this.generateReturnType(op)} {
-      const request: __Request = {
+    generateOperationBody(op) {
+        return `const request: __Request = {
         url: ${this.generateUrlValue(op)},
         method: '${op.method.toUpperCase()}',
         headers: ${this.generateHeadersValue(op)},
         body: ${this.generateBodyValue(op)},
       }
-      return this.execute(request).then(${this.generateResponseHandler(op)})
+      return this.execute(request).then(${this.generateResponseHandler(op)})`;
+    }
+    generate(id) {
+        return `${this.signatureGenerator.generate(id)} {
+      ${this.generateOperationBody(this.registry.getOperation(id))}
     }`;
     }
 }
 
 class ApiGenerator extends BaseGenerator {
     generate() {
+        const np = this.registry.getNameProvider();
         const opGenerator = new OperationGenerator(this.registry);
         const fns = this.registry
             .getOperationIds()
             .map((id) => opGenerator.generate(id))
             .join('\n');
-        return `
-    export type __Request = {
-      url: string
-      method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'OPTIONS' | 'HEAD' | 'PATCH' | 'TRACE'
-      body: string
-      headers: { [key: string]: string }
-    }
-    export type __Response = {
-      // status: number (We don't need it for now)
-      body: string
-    }
-    export abstract class AbstractApi {
+        return `export abstract class ${np.getApiImplName()} implements ${np.getApiTypeName()} {
       abstract execute(request: __Request): Promise<__Response>
       abstract getBaseUrl(): string
       abstract getDefaultHeaders(): {[key: string]: string}
@@ -594,11 +630,41 @@ class ParameterTypesGenerator extends BaseGenerator {
     }
 }
 
+class StaticTypesGenerator {
+    generate() {
+        return `export type __Request = {
+      url: string
+      method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'OPTIONS' | 'HEAD' | 'PATCH' | 'TRACE'
+      body: string
+      headers: { [key: string]: string }
+    }
+    export type __Response = {
+      // status: number (We don't need it for now)
+      body: string
+    }`;
+    }
+}
+
+class ApiTypeGenerator extends BaseGenerator {
+    generate() {
+        const signatureGen = new OperationSignatureGenerator(this.registry);
+        const fns = this.registry
+            .getOperationIds()
+            .map((id) => signatureGen.generate(id))
+            .join('\n');
+        return `export type ${this.registry.getNameProvider().getApiTypeName()} = {
+      ${fns}
+    }`;
+    }
+}
+
 class RootGenerator extends BaseGenerator {
     generate() {
         const generators = [
             new TypesGenerator(this.registry),
             new ParameterTypesGenerator(this.registry),
+            new ApiTypeGenerator(this.registry),
+            new StaticTypesGenerator(),
             new ApiGenerator(this.registry),
         ];
         return this.format(generators.map((g) => g.generate()).join('\n'));

@@ -1,4 +1,5 @@
 import pascalCase from 'pascalcase'
+import camelCase from 'camel-case'
 
 export class NameProvider {
   getEnumConstantName(name: string): string {
@@ -13,16 +14,34 @@ export class NameProvider {
   getParametersTypeName(operationName: string): string {
     return `${pascalCase(operationName)}Params`
   }
+  getParameterTypeName(operationName: string, paramName): string {
+    return `${this.getParametersTypeName(operationName)}${pascalCase(paramName)}`
+  }
   getNestedItemName(parentName: string): string {
     return `${parentName}ArrayItem`
   }
-  getNestedOneOfName(parentName: string): string {
-    return `${parentName}OneOf`
+  getNestedOneOfName(parentName: string, no: number): string {
+    return `${parentName}OneOf${no}`
   }
-  getNestedAnyOfName(parentName: string): string {
-    return `${parentName}AnyOf`
+  getNestedAnyOfName(parentName: string, no: number): string {
+    return `${parentName}AnyOf${no}`
   }
-  getNestedAllOfName(parentName: string): string {
-    return `${parentName}AllOf`
+  getNestedAllOfName(parentName: string, no: number): string {
+    return `${parentName}AllOf${no}`
+  }
+  getRequestBodyTypeName(operationName: string, method: string): string {
+    return `${pascalCase(operationName)}${pascalCase(method)}RequestBody`
+  }
+  getResponseTypeName(operationName: string, method: string): string {
+    return `${pascalCase(operationName)}${pascalCase(method)}Response`
+  }
+  getApiTypeName(): string {
+    return 'Api'
+  }
+  getApiImplName(): string {
+    return 'BaseApiImpl'
+  }
+  getOperatioName(id: string): string {
+    return camelCase(id)
   }
 }

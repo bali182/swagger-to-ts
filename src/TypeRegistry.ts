@@ -1,6 +1,15 @@
 import { SchemaObject, OpenApiSpec, OperationObject, PathItemObject } from '@loopback/openapi-v3-types'
 import entries from 'lodash/entries'
-import { isObjectType, isEnumType, isArrayType, isOneOfType, isAllOfType, isAnyOfType, isPureMapType } from './utils'
+import {
+  isObjectType,
+  isEnumType,
+  isArrayType,
+  isOneOfType,
+  isAllOfType,
+  isAnyOfType,
+  isPureMapType,
+  isRefType,
+} from './utils'
 import { TypeWrapper } from './TypeWrapper'
 import { HTTPMethod, OperationWrapper } from './OperationWrapper'
 import { NameProvider } from './NameProvider'
@@ -12,8 +21,8 @@ export class TypeRegistry {
   private readonly nameProvider: NameProvider = new NameProvider()
   constructor(spec: OpenApiSpec) {
     this.spec = spec
-    this.registerTypes()
     this.registerOperations()
+    this.registerTypes()
   }
   getNameProvider(): NameProvider {
     return this.nameProvider
@@ -81,18 +90,41 @@ export class TypeRegistry {
       this.registerTypeRecursively(this.nameProvider.getNestedItemName(name), schema.items, false)
     }
     if (isOneOfType(schema)) {
-      this.registerTypeRecursively(this.nameProvider.getNestedOneOfName(name), schema.oneOf, false)
+      schema.oneOf.forEach((child, index) =>
+        this.registerTypeRecursively(this.nameProvider.getNestedOneOfName(name, index), child, false),
+      )
     }
     if (isAllOfType(schema)) {
-      this.registerTypeRecursively(this.nameProvider.getNestedAllOfName(name), schema.allOf, false)
+      schema.allOf.forEach((child, index) =>
+        this.registerTypeRecursively(this.nameProvider.getNestedAllOfName(name, index), child, false),
+      )
     }
     if (isAnyOfType(schema)) {
-      this.registerTypeRecursively(this.nameProvider.getNestedAnyOfName(name), schema.anyOf, false)
+      schema.anyOf.forEach((child, index) =>
+        this.registerTypeRecursively(this.nameProvider.getNestedAnyOfName(name, index), child, false),
+      )
     }
   }
   protected registerTypes(): void {
     for (const [name, schema] of entries(this.spec.components.schemas)) {
       this.registerTypeRecursively(name, schema, true)
+    }
+    for (const op of this.getOperations()) {
+      for (const param of op.operation.parameters || []) {
+        if (!isRefType(param) && param.schema) {
+          this.registerTypeRecursively(
+            this.nameProvider.getParameterTypeName(op.getId(), param.name),
+            param.schema,
+            false,
+          )
+        }
+      }
+      for (const schema of op.getRequestBodyTypes()) {
+        this.registerTypeRecursively(this.nameProvider.getRequestBodyTypeName(op.getId(), op.method), schema, false)
+      }
+      for (const schema of op.getResponseTypes()) {
+        this.registerTypeRecursively(this.nameProvider.getResponseTypeName(op.getId(), op.method), schema, false)
+      }
     }
   }
   protected registerOperation(url: string, method: HTTPMethod, operation: OperationObject): void {

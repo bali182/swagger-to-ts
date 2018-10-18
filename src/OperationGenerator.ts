@@ -1,58 +1,15 @@
 import { BaseGenerator } from './BaseGenerator'
 import { TypeRegistry } from './TypeRegistry'
-import { TypeRefGenerator } from './TypeRefGenerator'
 import { OperationWrapper } from './OperationWrapper'
 import startsWith from 'lodash/startsWith'
 import endsWith from 'lodash/endsWith'
+import { OperationSignatureGenerator } from './OperationSignatureGenerator'
 
 export class OperationGenerator extends BaseGenerator<string> {
-  private readonly refGenerator: TypeRefGenerator
+  private readonly signatureGenerator: OperationSignatureGenerator
   constructor(registry: TypeRegistry) {
     super(registry)
-    this.refGenerator = new TypeRefGenerator(this.registry)
-  }
-
-  generateBodyParameter(op: OperationWrapper): string {
-    const reqTypes = op.getRequestBodyTypes()
-    const { refGenerator } = this
-    switch (reqTypes.length) {
-      case 0:
-        return null
-      case 1:
-        return `content: ${refGenerator.generate(reqTypes[0])}`
-      default:
-        return `content: ${refGenerator.generate({ oneOf: reqTypes })}`
-    }
-  }
-
-  generateParamsParameter(op: OperationWrapper): string {
-    if (op.operation.parameters && op.operation.parameters.length > 0) {
-      const type = this.registry.getNameProvider().getParametersTypeName(op.getId())
-      return `params: ${type}`
-    }
-    return null
-  }
-
-  generateParameters(op: OperationWrapper): string {
-    const params = [this.generateParamsParameter(op), this.generateBodyParameter(op)]
-    return params.filter((code) => code !== null).join(',')
-  }
-
-  generateReturnType(op: OperationWrapper): string {
-    return `Promise<${this.generatePromiseInnerType(op)}>`
-  }
-
-  generatePromiseInnerType(op: OperationWrapper): string {
-    const resTypes = op.getResponseBodyTypes()
-    const { refGenerator } = this
-    switch (resTypes.length) {
-      case 0:
-        return `void`
-      case 1:
-        return refGenerator.generate(resTypes[0])
-      default:
-        return refGenerator.generate({ oneOf: resTypes })
-    }
+    this.signatureGenerator = new OperationSignatureGenerator(this.registry)
   }
 
   generateUrlValue(op: OperationWrapper): string {
@@ -73,30 +30,33 @@ export class OperationGenerator extends BaseGenerator<string> {
   }
 
   generateBodyValue(op: OperationWrapper): string {
-    const bodyType = this.generateBodyParameter(op)
+    const bodyType = this.signatureGenerator.generateBodyParameter(op)
     return `${bodyType === null ? 'undefined' : `JSON.stringify(content)`}`
   }
 
-  generateResponseHandler(op: OperationWrapper) {
-    const resTypes = op.getResponseBodyTypes()
+  generateResponseHandler(op: OperationWrapper): string {
+    const resTypes = op.getResponseTypes()
     switch (resTypes.length) {
       case 0:
         return `() => undefined`
       default:
-        return `(response) => JSON.parse(response.body) as ${this.generatePromiseInnerType(op)}`
+        return `(response) => JSON.parse(response.body) as ${this.signatureGenerator.generatePromiseInnerType(op)}`
     }
   }
 
-  generate(id: string): string {
-    const op = this.registry.getOperation(id)
-    return `${id}(${this.generateParameters(op)}): ${this.generateReturnType(op)} {
-      const request: __Request = {
+  generateOperationBody(op: OperationWrapper): string {
+    return `const request: __Request = {
         url: ${this.generateUrlValue(op)},
         method: '${op.method.toUpperCase()}',
         headers: ${this.generateHeadersValue(op)},
         body: ${this.generateBodyValue(op)},
       }
-      return this.execute(request).then(${this.generateResponseHandler(op)})
+      return this.execute(request).then(${this.generateResponseHandler(op)})`
+  }
+
+  generate(id: string): string {
+    return `${this.signatureGenerator.generate(id)} {
+      ${this.generateOperationBody(this.registry.getOperation(id))}
     }`
   }
 }
