@@ -38,18 +38,22 @@ export class TypeGenerator extends BaseGenerator<string> {
     }`
   }
 
-  generateTypeDeclarationField(name: string, schema: SchemaOrRef): string {
-    return `${name}:${this.typeRefGenerator.generate(schema)}`
+  generateTypeDeclarationField(name: string, schema: SchemaOrRef, isRequired: boolean): string {
+    const colon = isRequired ? ':' : '?:'
+    return `${name}${colon}${this.typeRefGenerator.generate(schema)}`
   }
 
   generateTypeDeclarationFields(schema: SchemaObject): string {
-    return entries(schema || {})
-      .map(([name, subSchema]) => this.generateTypeDeclarationField(name, subSchema))
+    return entries(schema.properties || {})
+      .map(([name, subSchema]) => {
+        const isRequired = schema.required && schema.required.indexOf(name) >= 0
+        return this.generateTypeDeclarationField(name, subSchema, isRequired)
+      })
       .join(';\n')
   }
 
   generateTypeBody(schema: SchemaObject): string {
-    return `{${this.generateTypeDeclarationFields(schema.properties)}}`
+    return `{${this.generateTypeDeclarationFields(schema)}}`
   }
 
   getIntersectionTypes(name: string): string[] {

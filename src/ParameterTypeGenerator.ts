@@ -16,7 +16,8 @@ export class ParameterTypeGenerator extends BaseGenerator<string> {
     if (isReferenceObject(param)) {
       throw new TypeError(`Can't handle this!!!`)
     }
-    return `${param.name}: ${this.refGenerator.generate(param.schema)}`
+    const colon = param.required ? ':' : '?:'
+    return `${param.name}${colon} ${this.refGenerator.generate(param.schema)}`
   }
 
   generateParamsType(op: OperationObject): string {

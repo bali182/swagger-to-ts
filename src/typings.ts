@@ -6,3 +6,4 @@ export interface IGenerator<Input> {
 
 export type SchemaOrRef = SchemaObject | ReferenceObject
 export type RefOrParameter = ReferenceObject | ParameterObject
+export type PropertyMap = { [propertyName: string]: SchemaOrRef }

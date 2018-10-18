@@ -411,16 +411,20 @@ class TypeGenerator extends BaseGenerator {
       ${schema.enum.map((value) => `${np.getEnumConstantName(value)} = '${value}'`).join(',')}
     }`;
     }
-    generateTypeDeclarationField(name, schema) {
-        return `${name}:${this.typeRefGenerator.generate(schema)}`;
+    generateTypeDeclarationField(name, schema, isRequired) {
+        const colon = isRequired ? ':' : '?:';
+        return `${name}${colon}${this.typeRefGenerator.generate(schema)}`;
     }
     generateTypeDeclarationFields(schema) {
-        return entries(schema || {})
-            .map(([name, subSchema]) => this.generateTypeDeclarationField(name, subSchema))
+        return entries(schema.properties || {})
+            .map(([name, subSchema]) => {
+            const isRequired = schema.required && schema.required.indexOf(name) >= 0;
+            return this.generateTypeDeclarationField(name, subSchema, isRequired);
+        })
             .join(';\n');
     }
     generateTypeBody(schema) {
-        return `{${this.generateTypeDeclarationFields(schema.properties)}}`;
+        return `{${this.generateTypeDeclarationFields(schema)}}`;
     }
     getIntersectionTypes(name) {
         const schema = this.registry.getSchemaByName(name);
@@ -469,11 +473,10 @@ class TypeGenerator extends BaseGenerator {
 class TypesGenerator extends BaseGenerator {
     generate() {
         const typeGenerator = new TypeGenerator(this.registry);
-        const source = this.registry
+        return this.registry
             .getTypeNames()
             .map((name) => typeGenerator.generate(name))
             .join('\n');
-        return this.format(source);
     }
 }
 
@@ -602,7 +605,8 @@ class ParameterTypeGenerator extends BaseGenerator {
         if (openapiV3Types.isReferenceObject(param)) {
             throw new TypeError(`Can't handle this!!!`);
         }
-        return `${param.name}: ${this.refGenerator.generate(param.schema)}`;
+        const colon = param.required ? ':' : '?:';
+        return `${param.name}${colon} ${this.refGenerator.generate(param.schema)}`;
     }
     generateParamsType(op) {
         const name = this.registry.getNameProvider().getParametersTypeName(op.operationId);
