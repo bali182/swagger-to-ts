@@ -1,19 +1,21 @@
 {
-  "name": "create-typescript-from-avro",
-  "version": "0.2.0",
-  "description": "TypeSript code generator for Apache Avro types",
+  "name": "swagger-to-ts",
+  "version": "0.0.0",
+  "description": "TypeSript code generator from OpenAPI 3.0",
   "main": "./dist/index.js",
   "bin": {
-    "avro-to-ts": "./dist/cli.js"
+    "swag": "./dist/cli.js"
   },
   "directories": {
     "test": "test"
   },
   "scripts": {
-    "build": "rollup -c rollup.main.config.js",
+    "build-cli": "rollup -c rollup.cli.config.js",
+    "build-main": "rollup -c rollup.main.config.js",
+    "build": "npm run build-main && npm run build-cli",
     "test": "mocha -r ts-node/register test/*.spec.ts",
     "tslint": "tslint -c tslint.json 'src/**/*.ts'",
-    "on-sample": "npm run build && node dist/index.js"
+    "on-sample": "npm run build && node dist/cli.js -f swagger.json > output.ts"
   },
   "repository": {
     "type": "git",
@@ -22,19 +24,20 @@
   "readme": "READMD.md",
   "types": "./dist/index.d.ts",
   "keywords": [
-    "avro",
+    "openapi",
+    "swagger",
     "typescript"
   ],
-  "author": "Fred Fort",
+  "author": "Balazs Edes",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/fredfort/avro-typescript/issues"
   },
   "homepage": "https://github.com/fredfort/avro-typescript#readme",
   "devDependencies": {
+    "@types/argparse": "^1.0.35",
     "@types/chai": "^4.1.4",
     "@types/lodash": "^4.14.116",
-    "@types/minimist": "^1.2.0",
     "@types/mocha": "^5.2.5",
     "@types/node": "^7.0.69",
     "chai": "^4.1.2",
@@ -47,10 +50,10 @@
   },
   "dependencies": {
     "@loopback/openapi-v3-types": "^1.0.0",
+    "argparse": "^1.0.10",
     "camel-case": "^3.0.0",
     "constant-case": "^2.0.0",
     "lodash": "^4.17.11",
-    "minimist": "^1.2.0",
     "pascalcase": "^0.1.1",
     "prettier": "^1.14.2"
   }

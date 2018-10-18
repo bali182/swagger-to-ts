@@ -1,6 +1,5 @@
+#!/usr/bin/env node
 'use strict';
-
-Object.defineProperty(exports, '__esModule', { value: true });
 
 function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
 
@@ -14,6 +13,9 @@ var last = _interopDefault(require('lodash/last'));
 var startsWith = _interopDefault(require('lodash/startsWith'));
 var endsWith = _interopDefault(require('lodash/endsWith'));
 var openapiV3Types = require('@loopback/openapi-v3-types');
+var argparse = require('argparse');
+var fs = require('fs');
+var path = require('path');
 
 function isObjectType(input) {
     if (!(input instanceof Object)) {
@@ -257,8 +259,8 @@ class TypeRegistry {
         this.operations.push(new OperationWrapper(url, method, operation));
     }
     registerOperations() {
-        for (const [url, path] of entries(this.getSpec().paths)) {
-            const { get, put, post, delete: _delete, options, head, patch, trace } = path;
+        for (const [url, path$$1] of entries(this.getSpec().paths)) {
+            const { get, put, post, delete: _delete, options, head, patch, trace } = path$$1;
             get ? this.registerOperation(url, 'get', get) : null;
             put ? this.registerOperation(url, 'put', put) : null;
             post ? this.registerOperation(url, 'post', post) : null;
@@ -675,5 +677,34 @@ class RootGenerator extends BaseGenerator {
     }
 }
 
-exports.TypeRegistry = TypeRegistry;
-exports.RootGenerator = RootGenerator;
+const parser = new argparse.ArgumentParser({
+    description: 'OpenAPI 3.0 -> TypeScript generator',
+});
+parser.addArgument(['--file', '-f'], {
+    required: true,
+    dest: 'file',
+    help: 'Path to the .json file to be consumed.',
+});
+class CliGenerator {
+    constructor() {
+        this.args = parser.parseArgs();
+    }
+    readSchema() {
+        const file = path.resolve(this.args.file);
+        const content = fs.readFileSync(file, 'UTF8');
+        const schema = JSON.parse(content);
+        return schema;
+    }
+    writeOutput(source) {
+        process.stdout.write(source);
+    }
+    execute() {
+        const schema = this.readSchema();
+        const registry = new TypeRegistry(schema);
+        const generator = new RootGenerator(registry);
+        const source = generator.generate();
+        this.writeOutput(source);
+    }
+}
+
+new CliGenerator().execute();
