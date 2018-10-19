@@ -111,7 +111,7 @@ export class TypeRefGenerator extends BaseGenerator<SchemaOrRef> {
   generateAnonymusObjectType(schema: SchemaObject): string {
     const fields = entries(schema.properties).map(([name, propSchema]) => {
       const colon = schema.required && schema.required.indexOf(name) >= 0 ? ':' : '?:'
-      return `${name}${colon}${this.generate(schema)}`
+      return `${name}${colon}${this.generate(propSchema)}`
     })
     return `{${fields}}`
   }
