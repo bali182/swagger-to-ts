@@ -1,9 +1,10 @@
 import { ArgumentParser } from 'argparse'
 import { readFileSync } from 'fs'
-import { resolve } from 'path'
+import { resolve, extname } from 'path'
 import { OpenApiSpec } from '@loopback/openapi-v3-types'
 import { TypeRegistry } from './TypeRegistry'
 import { RootGenerator } from './RootGenerator'
+import YAML from 'yamljs'
 
 type Args = {
   file: string
@@ -25,8 +26,17 @@ export class CliGenerator {
   readSchema(): OpenApiSpec {
     const file = resolve(this.args.file)
     const content = readFileSync(file, 'UTF8')
-    const schema: OpenApiSpec = JSON.parse(content)
+    const schema: OpenApiSpec = this.parseSchema(extname(file), content)
     return schema
+  }
+
+  parseSchema(ext: string, content: string): OpenApiSpec {
+    switch (ext.toLowerCase()) {
+      case '.yaml':
+        return YAML.parse(content)
+      default:
+        return JSON.parse(content)
+    }
   }
 
   writeOutput(source: string) {

@@ -9,7 +9,7 @@ export class StaticTypesGenerator implements IGenerator<void> {
       headers: { [key: string]: string }
     }
     export type __Response = {
-      // status: number (We don't need it for now)
+      status: number
       body: string
     }`
   }

@@ -46,10 +46,8 @@ export class OperationSignatureGenerator extends BaseGenerator<string> {
     switch (resTypes.length) {
       case 0:
         return `void`
-      case 1:
-        return refGenerator.generate(resTypes[0])
       default:
-        return refGenerator.generate({ oneOf: resTypes })
+        return resTypes.map((t) => (t === null ? 'void' : refGenerator.generate(t))).join(' | ')
     }
   }
 

@@ -9,7 +9,9 @@
       "type": "node",
       "request": "launch",
       "args": [
-        "src/index.ts"
+        "src/cli.ts",
+        "-f",
+        "petstore.yaml"
       ],
       "runtimeArgs": [
         "-r",

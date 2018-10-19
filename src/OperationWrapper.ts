@@ -1,4 +1,4 @@
-import { OperationObject } from '@loopback/openapi-v3-types'
+import { OperationObject, ResponseObject, ReferenceObject } from '@loopback/openapi-v3-types'
 import entries from 'lodash/entries'
 import { isRefType, isRequestBody, isResponse } from './utils'
 import { SchemaOrRef } from './typings'
@@ -32,18 +32,51 @@ export class OperationWrapper {
     return types
   }
   getResponseTypes(): SchemaOrRef[] {
-    const types: SchemaOrRef[] = []
+    const types: Set<SchemaOrRef> = new Set()
     for (const [, response] of entries(this.operation.responses || {})) {
-      if (isRefType(response)) {
-        types.push(response)
-      } else if (isResponse(response) && response.content) {
-        for (const [, mediaObj] of entries(response.content)) {
-          if (mediaObj.schema) {
-            types.push(mediaObj.schema)
-          }
-        }
+      for (const type of this._getResponseTypes(response)) {
+        types.add(type)
       }
     }
-    return types
+    return Array.from(types)
+  }
+  getResponseStatuses(): number[] {
+    const statuses: number[] = []
+    for (const [status] of entries(this.operation.responses || {})) {
+      if (status !== 'default') {
+        statuses.push(parseInt(status, 10))
+      }
+    }
+    return statuses
+  }
+  hasDefaultStatus(): boolean {
+    return Boolean((this.operation.responses || ({} as ResponseObject)).default)
+  }
+  private _getResponseTypes(res: ResponseObject | ReferenceObject): SchemaOrRef[] {
+    if (isRefType(res)) {
+      return [res]
+    }
+    if (isResponse(res)) {
+      if (!res.content) {
+        return [null]
+      } else {
+        const types = new Set<SchemaOrRef>()
+        for (const [, mediaObj] of entries(res.content)) {
+          if (mediaObj.schema) {
+            types.add(mediaObj.schema)
+          } else {
+            types.add(null)
+          }
+        }
+        return Array.from(types)
+      }
+    }
+    return [null]
+  }
+  getDefaultResponseTypes(): SchemaOrRef[] {
+    return this._getResponseTypes((this.operation.responses || ({} as ResponseObject)).default)
+  }
+  getResponseTypesForStatus(status: number): SchemaOrRef[] {
+    return this._getResponseTypes((this.operation.responses || ({} as ResponseObject))[status])
   }
 }

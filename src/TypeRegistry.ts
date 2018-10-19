@@ -94,7 +94,7 @@ export class TypeRegistry {
         this.registerTypeRecursively(this.nameProvider.getNestedOneOfName(name, index), child, false),
       )
     }
-    if (isAllOfType(schema)) {
+    if (isAllOfType(schema) && !schema.allOf.every(isRefType)) {
       schema.allOf.forEach((child, index) =>
         this.registerTypeRecursively(this.nameProvider.getNestedAllOfName(name, index), child, false),
       )
@@ -123,7 +123,9 @@ export class TypeRegistry {
         this.registerTypeRecursively(this.nameProvider.getRequestBodyTypeName(op.getId(), op.method), schema, false)
       }
       for (const schema of op.getResponseTypes()) {
-        this.registerTypeRecursively(this.nameProvider.getResponseTypeName(op.getId(), op.method), schema, false)
+        if (schema !== null) {
+          this.registerTypeRecursively(this.nameProvider.getResponseTypeName(op.getId(), op.method), schema, false)
+        }
       }
     }
   }

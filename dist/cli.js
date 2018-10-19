@@ -15,6 +15,7 @@ var endsWith = _interopDefault(require('lodash/endsWith'));
 var argparse = require('argparse');
 var fs = require('fs');
 var path = require('path');
+var YAML = _interopDefault(require('yamljs'));
 
 function isObjectType(input) {
     if (!(input instanceof Object)) {
@@ -91,20 +92,54 @@ class OperationWrapper {
         return types;
     }
     getResponseTypes() {
-        const types = [];
+        const types = new Set();
         for (const [, response] of entries(this.operation.responses || {})) {
-            if (isRefType(response)) {
-                types.push(response);
-            }
-            else if (isResponse(response) && response.content) {
-                for (const [, mediaObj] of entries(response.content)) {
-                    if (mediaObj.schema) {
-                        types.push(mediaObj.schema);
-                    }
-                }
+            for (const type of this._getResponseTypes(response)) {
+                types.add(type);
             }
         }
-        return types;
+        return Array.from(types);
+    }
+    getResponseStatuses() {
+        const statuses = [];
+        for (const [status] of entries(this.operation.responses || {})) {
+            if (status !== 'default') {
+                statuses.push(parseInt(status, 10));
+            }
+        }
+        return statuses;
+    }
+    hasDefaultStatus() {
+        return Boolean((this.operation.responses || {}).default);
+    }
+    _getResponseTypes(res) {
+        if (isRefType(res)) {
+            return [res];
+        }
+        if (isResponse(res)) {
+            if (!res.content) {
+                return [null];
+            }
+            else {
+                const types = new Set();
+                for (const [, mediaObj] of entries(res.content)) {
+                    if (mediaObj.schema) {
+                        types.add(mediaObj.schema);
+                    }
+                    else {
+                        types.add(null);
+                    }
+                }
+                return Array.from(types);
+            }
+        }
+        return [null];
+    }
+    getDefaultResponseTypes() {
+        return this._getResponseTypes((this.operation.responses || {}).default);
+    }
+    getResponseTypesForStatus(status) {
+        return this._getResponseTypes((this.operation.responses || {})[status]);
     }
 }
 
@@ -229,7 +264,7 @@ class TypeRegistry {
         if (isOneOfType(schema)) {
             schema.oneOf.forEach((child, index) => this.registerTypeRecursively(this.nameProvider.getNestedOneOfName(name, index), child, false));
         }
-        if (isAllOfType(schema)) {
+        if (isAllOfType(schema) && !schema.allOf.every(isRefType)) {
             schema.allOf.forEach((child, index) => this.registerTypeRecursively(this.nameProvider.getNestedAllOfName(name, index), child, false));
         }
         if (isAnyOfType(schema)) {
@@ -250,7 +285,9 @@ class TypeRegistry {
                 this.registerTypeRecursively(this.nameProvider.getRequestBodyTypeName(op.getId(), op.method), schema, false);
             }
             for (const schema of op.getResponseTypes()) {
-                this.registerTypeRecursively(this.nameProvider.getResponseTypeName(op.getId(), op.method), schema, false);
+                if (schema !== null) {
+                    this.registerTypeRecursively(this.nameProvider.getResponseTypeName(op.getId(), op.method), schema, false);
+                }
             }
         }
     }
@@ -321,6 +358,9 @@ class TypeRefGenerator extends BaseGenerator {
             else if (isAnyOfType(schema)) {
                 return this.generateAnyOfType(schema);
             }
+            else if (isObjectType(schema)) {
+                return this.generateAnonymusObjectType(schema);
+            }
         }
         throw new TypeError(`${JSON.stringify(schema)} is of unknown type, cannot be generated`);
     }
@@ -375,6 +415,13 @@ class TypeRefGenerator extends BaseGenerator {
     }
     generateRootType(schema) {
         return this.registry.getNameBySchema(schema);
+    }
+    generateAnonymusObjectType(schema) {
+        const fields = entries(schema.properties).map(([name, propSchema]) => {
+            const colon = schema.required && schema.required.indexOf(name) >= 0 ? ':' : '?:';
+            return `${name}${colon}${this.generate(schema)}`;
+        });
+        return `{${fields}}`;
     }
 }
 
@@ -518,10 +565,8 @@ class OperationSignatureGenerator extends BaseGenerator {
         switch (resTypes.length) {
             case 0:
                 return `void`;
-            case 1:
-                return refGenerator.generate(resTypes[0]);
             default:
-                return refGenerator.generate({ oneOf: resTypes });
+                return resTypes.map((t) => (t === null ? 'void' : refGenerator.generate(t))).join(' | ');
         }
     }
     generate(id) {
@@ -531,10 +576,68 @@ class OperationSignatureGenerator extends BaseGenerator {
     }
 }
 
+class ResponseHandlerGenerator extends BaseGenerator {
+    constructor(registry) {
+        super(registry);
+        this.refGenerator = new TypeRefGenerator(this.registry);
+    }
+    generateReturnValue(types) {
+        if (types.length === 0 || (types.length === 1 && types[0] === null)) {
+            return '';
+        }
+        else if (types.every((t) => t !== null)) {
+            const tString = types.map((t) => this.refGenerator.generate(t)).join('|');
+            return `JSON.parse(body) as ${tString}`;
+        }
+        else {
+            throw new TypeError(`Can't handle multiple content-types!`);
+        }
+    }
+    generateCaseBody(status, op) {
+        if (status >= 200 && status < 300) {
+            return `Promise.resolve(${this.generateReturnValue(op.getResponseTypesForStatus(status))})`;
+        }
+        else {
+            return `Promise.reject(${this.generateReturnValue(op.getResponseTypesForStatus(status))})`;
+        }
+    }
+    generateSwitchBranches(op) {
+        const cases = op.getResponseStatuses().map((status) => {
+            return `case ${status}: return ${this.generateCaseBody(status, op)}`;
+        });
+        if (op.hasDefaultStatus()) {
+            const value = this.generateReturnValue(op.getDefaultResponseTypes());
+            cases.push(`default: return status >= 200 && status < 300 ? Promise.resolve(${value}) : Promise.reject(${value})`);
+        }
+        return cases.join('\n');
+    }
+    generateSwitch(op) {
+        return `switch(status) {
+      ${this.generateSwitchBranches(op)}
+    }`;
+    }
+    generate(op) {
+        const statusesLength = op.getResponseStatuses().length + (op.hasDefaultStatus() ? 1 : 0);
+        switch (statusesLength) {
+            case 0:
+                return `() => Promise.resolve()`;
+            default:
+                const pType = op
+                    .getResponseTypes()
+                    .map((t) => (t === null ? 'void' : this.refGenerator.generate(t)))
+                    .join('|');
+                return `({body, status}: __Response): Promise<${pType}> => {
+          ${this.generateSwitch(op)}
+        }`;
+        }
+    }
+}
+
 class OperationGenerator extends BaseGenerator {
     constructor(registry) {
         super(registry);
         this.signatureGenerator = new OperationSignatureGenerator(this.registry);
+        this.handlerGenerator = new ResponseHandlerGenerator(this.registry);
     }
     generateUrlValue(op) {
         const segments = op.url.split('/').filter((s) => s.length > 0);
@@ -555,15 +658,6 @@ class OperationGenerator extends BaseGenerator {
         const bodyType = this.signatureGenerator.generateBodyParameter(op);
         return `${bodyType === null ? 'undefined' : `JSON.stringify(content)`}`;
     }
-    generateResponseHandler(op) {
-        const resTypes = op.getResponseTypes();
-        switch (resTypes.length) {
-            case 0:
-                return `() => undefined`;
-            default:
-                return `(response) => JSON.parse(response.body) as ${this.signatureGenerator.generatePromiseInnerType(op)}`;
-        }
-    }
     generateOperationBody(op) {
         return `const request: __Request = {
         url: ${this.generateUrlValue(op)},
@@ -571,7 +665,7 @@ class OperationGenerator extends BaseGenerator {
         headers: ${this.generateHeadersValue(op)},
         body: ${this.generateBodyValue(op)},
       }
-      return this.execute(request).then(${this.generateResponseHandler(op)})`;
+      return this.execute(request).then(${this.handlerGenerator.generate(op)})`;
     }
     generate(id) {
         return `${this.signatureGenerator.generate(id)} {
@@ -644,7 +738,7 @@ class StaticTypesGenerator {
       headers: { [key: string]: string }
     }
     export type __Response = {
-      // status: number (We don't need it for now)
+      status: number
       body: string
     }`;
     }
@@ -691,8 +785,16 @@ class CliGenerator {
     readSchema() {
         const file = path.resolve(this.args.file);
         const content = fs.readFileSync(file, 'UTF8');
-        const schema = JSON.parse(content);
+        const schema = this.parseSchema(path.extname(file), content);
         return schema;
+    }
+    parseSchema(ext, content) {
+        switch (ext.toLowerCase()) {
+            case '.yaml':
+                return YAML.parse(content);
+            default:
+                return JSON.parse(content);
+        }
     }
     writeOutput(source) {
         process.stdout.write(source);

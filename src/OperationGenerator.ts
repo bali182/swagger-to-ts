@@ -4,12 +4,15 @@ import { OperationWrapper } from './OperationWrapper'
 import startsWith from 'lodash/startsWith'
 import endsWith from 'lodash/endsWith'
 import { OperationSignatureGenerator } from './OperationSignatureGenerator'
+import { ResponseHandlerGenerator } from './ResponseHandlerGenerator'
 
 export class OperationGenerator extends BaseGenerator<string> {
   private readonly signatureGenerator: OperationSignatureGenerator
+  private readonly handlerGenerator: ResponseHandlerGenerator
   constructor(registry: TypeRegistry) {
     super(registry)
     this.signatureGenerator = new OperationSignatureGenerator(this.registry)
+    this.handlerGenerator = new ResponseHandlerGenerator(this.registry)
   }
 
   generateUrlValue(op: OperationWrapper): string {
@@ -34,16 +37,6 @@ export class OperationGenerator extends BaseGenerator<string> {
     return `${bodyType === null ? 'undefined' : `JSON.stringify(content)`}`
   }
 
-  generateResponseHandler(op: OperationWrapper): string {
-    const resTypes = op.getResponseTypes()
-    switch (resTypes.length) {
-      case 0:
-        return `() => undefined`
-      default:
-        return `(response) => JSON.parse(response.body) as ${this.signatureGenerator.generatePromiseInnerType(op)}`
-    }
-  }
-
   generateOperationBody(op: OperationWrapper): string {
     return `const request: __Request = {
         url: ${this.generateUrlValue(op)},
@@ -51,7 +44,7 @@ export class OperationGenerator extends BaseGenerator<string> {
         headers: ${this.generateHeadersValue(op)},
         body: ${this.generateBodyValue(op)},
       }
-      return this.execute(request).then(${this.generateResponseHandler(op)})`
+      return this.execute(request).then(${this.handlerGenerator.generate(op)})`
   }
 
   generate(id: string): string {

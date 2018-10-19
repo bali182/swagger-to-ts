@@ -10,8 +10,10 @@ import {
   isAllOfType,
   isAnyOfType,
   isRefType,
+  isObjectType,
 } from './utils'
 import last from 'lodash/last'
+import entries from 'lodash/entries'
 import pascalCase from 'pascalcase'
 
 export class TypeRefGenerator extends BaseGenerator<SchemaOrRef> {
@@ -37,6 +39,8 @@ export class TypeRefGenerator extends BaseGenerator<SchemaOrRef> {
         return this.generateAllOfType(schema)
       } else if (isAnyOfType(schema)) {
         return this.generateAnyOfType(schema)
+      } else if (isObjectType(schema)) {
+        return this.generateAnonymusObjectType(schema)
       }
     }
     throw new TypeError(`${JSON.stringify(schema)} is of unknown type, cannot be generated`)
@@ -102,5 +106,13 @@ export class TypeRefGenerator extends BaseGenerator<SchemaOrRef> {
 
   generateRootType(schema: SchemaObject): string {
     return this.registry.getNameBySchema(schema)
+  }
+
+  generateAnonymusObjectType(schema: SchemaObject): string {
+    const fields = entries(schema.properties).map(([name, propSchema]) => {
+      const colon = schema.required && schema.required.indexOf(name) >= 0 ? ':' : '?:'
+      return `${name}${colon}${this.generate(schema)}`
+    })
+    return `{${fields}}`
   }
 }
