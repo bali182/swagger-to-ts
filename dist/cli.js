@@ -753,16 +753,19 @@ class OperationGenerator extends BaseGenerator {
     generateHeadersValue(op) {
         return `this.getDefaultHeaders()`;
     }
-    generateBodyValue(op) {
+    generateBody(op) {
         const bodyType = this.signatureGenerator.generateBodyParameter(op);
-        return `${bodyType === null ? 'undefined' : `JSON.stringify(content)`}`;
+        if (bodyType === null) {
+            return '';
+        }
+        return 'body: JSON.stringify(content),';
     }
     generateOperationBody(op) {
         return `const request: __Request = {
         url: ${this.urlGenerator.generate(op)},
         method: '${op.method.toUpperCase()}',
         headers: ${this.generateHeadersValue(op)},
-        body: ${this.generateBodyValue(op)},
+        ${this.generateBody(op)}
       }
       return this.execute(request).then(${this.handlerGenerator.generate(op)})`;
     }
@@ -833,12 +836,12 @@ class StaticTypesGenerator {
         return `export type __Request = {
       url: string
       method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'OPTIONS' | 'HEAD' | 'PATCH' | 'TRACE'
-      body: string
+      body?: string
       headers: { [key: string]: string }
     }
     export type __Response = {
       status: number
-      body: string
+      body?: string
     }`;
     }
 }

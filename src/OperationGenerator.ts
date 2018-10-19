@@ -21,9 +21,12 @@ export class OperationGenerator extends BaseGenerator<string> {
     return `this.getDefaultHeaders()`
   }
 
-  generateBodyValue(op: OperationWrapper): string {
+  generateBody(op: OperationWrapper): string {
     const bodyType = this.signatureGenerator.generateBodyParameter(op)
-    return `${bodyType === null ? 'undefined' : `JSON.stringify(content)`}`
+    if (bodyType === null) {
+      return ''
+    }
+    return 'body: JSON.stringify(content),'
   }
 
   generateOperationBody(op: OperationWrapper): string {
@@ -31,7 +34,7 @@ export class OperationGenerator extends BaseGenerator<string> {
         url: ${this.urlGenerator.generate(op)},
         method: '${op.method.toUpperCase()}',
         headers: ${this.generateHeadersValue(op)},
-        body: ${this.generateBodyValue(op)},
+        ${this.generateBody(op)}
       }
       return this.execute(request).then(${this.handlerGenerator.generate(op)})`
   }

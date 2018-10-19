@@ -26,12 +26,12 @@ export type Api = {
 export type __Request = {
   url: string
   method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'OPTIONS' | 'HEAD' | 'PATCH' | 'TRACE'
-  body: string
+  body?: string
   headers: { [key: string]: string }
 }
 export type __Response = {
   status: number
-  body: string
+  body?: string
 }
 export abstract class BaseApiImpl implements Api {
   abstract execute(request: __Request): Promise<__Response>
@@ -50,7 +50,6 @@ export abstract class BaseApiImpl implements Api {
       })(),
       method: 'GET',
       headers: this.getDefaultHeaders(),
-      body: undefined,
     }
     return this.execute(request).then(
       ({ body, status }: __Response): Promise<Pet[] | Error> => {
@@ -90,7 +89,6 @@ export abstract class BaseApiImpl implements Api {
       url: `${this.getBaseUrl()}/pets/${params.id}`,
       method: 'GET',
       headers: this.getDefaultHeaders(),
-      body: undefined,
     }
     return this.execute(request).then(
       ({ body, status }: __Response): Promise<Pet | Error> => {
@@ -110,7 +108,6 @@ export abstract class BaseApiImpl implements Api {
       url: `${this.getBaseUrl()}/pets/${params.id}`,
       method: 'DELETE',
       headers: this.getDefaultHeaders(),
-      body: undefined,
     }
     return this.execute(request).then(
       ({ body, status }: __Response): Promise<void | Error> => {
