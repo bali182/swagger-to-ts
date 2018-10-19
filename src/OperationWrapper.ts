@@ -1,6 +1,12 @@
-import { OperationObject, ResponseObject, ReferenceObject } from '@loopback/openapi-v3-types'
+import {
+  OperationObject,
+  ResponseObject,
+  ReferenceObject,
+  ParameterObject,
+  ParameterLocation,
+} from '@loopback/openapi-v3-types'
 import entries from 'lodash/entries'
-import { isRefType, isRequestBody, isResponse } from './utils'
+import { isRefType, isRequestBody, isResponse, isParameter } from './utils'
 import { SchemaOrRef } from './typings'
 
 export type HTTPMethod = 'get' | 'put' | 'post' | 'delete' | 'options' | 'head' | 'patch' | 'trace'
@@ -13,6 +19,21 @@ export class OperationWrapper {
     this.url = url
     this.method = method
     this.operation = operation
+  }
+  getParameters(): ParameterObject[] {
+    return (this.operation.parameters || []).filter(isParameter).map((param) => param as ParameterObject)
+  }
+  getPathParameters(): ParameterObject[] {
+    return this.getParametersByLocation('path')
+  }
+  getQueryParameters(): ParameterObject[] {
+    return this.getParametersByLocation('query')
+  }
+  getHeaderParameters(): ParameterObject[] {
+    return this.getParametersByLocation('header')
+  }
+  getParametersByLocation(loc: ParameterLocation): ParameterObject[] {
+    return this.getParameters().filter((param) => param.in === loc)
   }
   getId(): string {
     return this.operation.operationId

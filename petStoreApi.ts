@@ -39,7 +39,15 @@ export abstract class BaseApiImpl implements Api {
   abstract getDefaultHeaders(): { [key: string]: string }
   findPets(params: FindPetsParams): Promise<Pet[] | Error> {
     const request: __Request = {
-      url: `${this.getBaseUrl()}/pets`,
+      url: (() => {
+        const querySegments = [
+          params.tags === undefined || params.tags.length === 0 ? null : params.tags.map((e) => `tags=${e}`).join('&'),
+          params.limit === undefined ? null : `limit=${params.limit}`,
+        ]
+        const queryString = querySegments.filter((segment) => segment !== null).join('&')
+        const query = queryString.length === 0 ? '' : `?${queryString}`
+        return `${this.getBaseUrl()}/pets${query}`
+      })(),
       method: 'GET',
       headers: this.getDefaultHeaders(),
       body: undefined,

@@ -1,31 +1,20 @@
 import { BaseGenerator } from './BaseGenerator'
 import { TypeRegistry } from './TypeRegistry'
 import { OperationWrapper } from './OperationWrapper'
-import startsWith from 'lodash/startsWith'
-import endsWith from 'lodash/endsWith'
 import { OperationSignatureGenerator } from './OperationSignatureGenerator'
 import { ResponseHandlerGenerator } from './ResponseHandlerGenerator'
+import { UrlGenerator } from './UrlGenerator'
 
 export class OperationGenerator extends BaseGenerator<string> {
   private readonly signatureGenerator: OperationSignatureGenerator
   private readonly handlerGenerator: ResponseHandlerGenerator
+  private readonly urlGenerator: UrlGenerator
+
   constructor(registry: TypeRegistry) {
     super(registry)
     this.signatureGenerator = new OperationSignatureGenerator(this.registry)
     this.handlerGenerator = new ResponseHandlerGenerator(this.registry)
-  }
-
-  generateUrlValue(op: OperationWrapper): string {
-    const segments = op.url.split('/').filter((s) => s.length > 0)
-    const replacedSegments = segments.map((segment) => {
-      if (startsWith(segment, '{') && endsWith(segment, '}')) {
-        const varName = segment.substring(1, segment.length - 1)
-        return `\${params.${varName}}`
-      }
-      return segment
-    })
-    const partialUrl = replacedSegments.join('/')
-    return `\`\${this.getBaseUrl()}/${partialUrl}\``
+    this.urlGenerator = new UrlGenerator(this.registry)
   }
 
   generateHeadersValue(op: OperationWrapper): string {
@@ -39,7 +28,7 @@ export class OperationGenerator extends BaseGenerator<string> {
 
   generateOperationBody(op: OperationWrapper): string {
     return `const request: __Request = {
-        url: ${this.generateUrlValue(op)},
+        url: ${this.urlGenerator.generate(op)},
         method: '${op.method.toUpperCase()}',
         headers: ${this.generateHeadersValue(op)},
         body: ${this.generateBodyValue(op)},

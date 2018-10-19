@@ -16,7 +16,7 @@ export class ParameterTypeGenerator extends BaseGenerator<string> {
     if (isRefType(param)) {
       throw new TypeError(`Can't handle this!!!`)
     }
-    const colon = param.required ? ':' : '?:'
+    const colon = param.required || param.in === 'path' ? ':' : '?:'
     return `${param.name}${colon} ${this.refGenerator.generate(param.schema)}`
   }
 
