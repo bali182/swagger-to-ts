@@ -2,6 +2,7 @@ import { BaseGenerator } from './BaseGenerator'
 import { TypeRegistry } from './TypeRegistry'
 import { TypeRefGenerator } from './TypeRefGenerator'
 import { OperationWrapper } from './OperationWrapper'
+import { unique } from './utils'
 
 export class OperationSignatureGenerator extends BaseGenerator<string> {
   private readonly refGenerator: TypeRefGenerator
@@ -47,7 +48,7 @@ export class OperationSignatureGenerator extends BaseGenerator<string> {
       case 0:
         return `void`
       default:
-        return resTypes.map((t) => (t === null ? 'void' : refGenerator.generate(t))).join(' | ')
+        return unique(resTypes.map((t) => (t === null ? 'void' : refGenerator.generate(t)))).join(' | ')
     }
   }
 

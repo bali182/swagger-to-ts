@@ -8,6 +8,10 @@ import {
 import keys from 'lodash/keys'
 import isNil from 'lodash/isNil'
 
+export function unique<T>(items: T[]): T[] {
+  const set = new Set(items)
+  return Array.from(set)
+}
 export function isObjectType(input: SchemaObject): boolean {
   if (!(input instanceof Object)) {
     return false

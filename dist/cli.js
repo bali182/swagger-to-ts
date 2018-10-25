@@ -17,6 +17,10 @@ var fs = require('fs');
 var path = require('path');
 var YAML = _interopDefault(require('yamljs'));
 
+function unique(items) {
+    const set = new Set(items);
+    return Array.from(set);
+}
 function isObjectType(input) {
     if (!(input instanceof Object)) {
         return false;
@@ -584,7 +588,7 @@ class OperationSignatureGenerator extends BaseGenerator {
             case 0:
                 return `void`;
             default:
-                return resTypes.map((t) => (t === null ? 'void' : refGenerator.generate(t))).join(' | ');
+                return unique(resTypes.map((t) => (t === null ? 'void' : refGenerator.generate(t)))).join(' | ');
         }
     }
     generate(id) {
