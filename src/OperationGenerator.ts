@@ -4,21 +4,24 @@ import { OperationWrapper } from './OperationWrapper'
 import { OperationSignatureGenerator } from './OperationSignatureGenerator'
 import { ResponseHandlerGenerator } from './ResponseHandlerGenerator'
 import { UrlGenerator } from './UrlGenerator'
+import { HeadersGenerator } from './HeadersGenerator'
 
 export class OperationGenerator extends BaseGenerator<string> {
   private readonly signatureGenerator: OperationSignatureGenerator
   private readonly handlerGenerator: ResponseHandlerGenerator
   private readonly urlGenerator: UrlGenerator
+  private readonly headersGenerator: HeadersGenerator
 
   constructor(registry: TypeRegistry) {
     super(registry)
     this.signatureGenerator = new OperationSignatureGenerator(this.registry)
     this.handlerGenerator = new ResponseHandlerGenerator(this.registry)
     this.urlGenerator = new UrlGenerator(this.registry)
+    this.headersGenerator = new HeadersGenerator(this.registry)
   }
 
   generateHeadersValue(op: OperationWrapper): string {
-    return `this.getDefaultHeaders()`
+    return this.headersGenerator.generate(op)
   }
 
   generateBody(op: OperationWrapper): string {
@@ -36,7 +39,7 @@ export class OperationGenerator extends BaseGenerator<string> {
         headers: ${this.generateHeadersValue(op)},
         ${this.generateBody(op)}
       }
-      return this.client.execute(request).then(${this.handlerGenerator.generate(op)})`
+      return this.adapter.execute(request).then(${this.handlerGenerator.generate(op)})`
   }
 
   generate(id: string): string {

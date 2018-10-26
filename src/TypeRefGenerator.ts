@@ -14,6 +14,7 @@ import {
 } from './utils'
 import last from 'lodash/last'
 import entries from 'lodash/entries'
+import isVarName from 'is-var-name'
 import pascalCase from 'pascalcase'
 
 export class TypeRefGenerator extends BaseGenerator<SchemaOrRef> {
@@ -110,8 +111,9 @@ export class TypeRefGenerator extends BaseGenerator<SchemaOrRef> {
 
   generateAnonymusObjectType(schema: SchemaObject): string {
     const fields = entries(schema.properties).map(([name, propSchema]) => {
+      const fieldName = isVarName(name) ? name : `'${name}'`
       const colon = schema.required && schema.required.indexOf(name) >= 0 ? ':' : '?:'
-      return `${name}${colon}${this.generate(propSchema)}`
+      return `${fieldName}${colon}${this.generate(propSchema)}`
     })
     return `{${fields}}`
   }

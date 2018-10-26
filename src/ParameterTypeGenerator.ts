@@ -4,6 +4,7 @@ import { TypeRefGenerator } from './TypeRefGenerator'
 import { OperationObject } from 'openapi3-ts'
 import { RefOrParameter } from './typings'
 import { isRefType } from './utils'
+import isVarName from 'is-var-name'
 
 export class ParameterTypeGenerator extends BaseGenerator<string> {
   private readonly refGenerator: TypeRefGenerator
@@ -17,7 +18,8 @@ export class ParameterTypeGenerator extends BaseGenerator<string> {
       throw new TypeError(`Can't handle this!!!`)
     }
     const colon = param.required || param.in === 'path' ? ':' : '?:'
-    return `${param.name}${colon} ${this.refGenerator.generate(param.schema)}`
+    const paramName = isVarName(param.name) ? param.name : `'${param.name}'`
+    return `${paramName}${colon} ${this.refGenerator.generate(param.schema)}`
   }
 
   generateParamsType(op: OperationObject): string {

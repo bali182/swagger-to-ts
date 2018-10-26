@@ -9,13 +9,11 @@ export class ApiGenerator extends BaseGenerator<void> {
       .getOperationIds()
       .map((id) => opGenerator.generate(id))
       .join('\n')
-    return `export abstract class ${np.getApiImplName()} implements ${np.getApiTypeName()} {
-      private readonly client: __HttpClient 
-      constructor(client: __HttpClient) {
-        this.client = client
+    return `export class ${np.getApiImplName()} implements ${np.getApiTypeName()} {
+      private readonly adapter: __HttpAdapter 
+      constructor(adapter: __HttpAdapter) {
+        this.adapter = adapter
       }
-      abstract getBaseUrl(): string
-      abstract getDefaultHeaders(): {[key: string]: string}
       ${fns}
     }`
   }

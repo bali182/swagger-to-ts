@@ -6,14 +6,15 @@ function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'defau
 var keys = _interopDefault(require('lodash/keys'));
 var isNil = _interopDefault(require('lodash/isNil'));
 var entries = _interopDefault(require('lodash/entries'));
-var pascalCase = _interopDefault(require('pascalcase'));
-var camelCase = _interopDefault(require('camel-case'));
 var prettier = _interopDefault(require('prettier'));
 var last = _interopDefault(require('lodash/last'));
-var startsWith = _interopDefault(require('lodash/startsWith'));
+var isVarName = _interopDefault(require('is-var-name'));
+var pascalCase = _interopDefault(require('pascalcase'));
 var endsWith = _interopDefault(require('lodash/endsWith'));
+var startsWith = _interopDefault(require('lodash/startsWith'));
 var fs = require('fs');
 var path = require('path');
+var camelCase = _interopDefault(require('camel-case'));
 var argparse = require('argparse');
 var YAML = _interopDefault(require('yamljs'));
 
@@ -92,6 +93,9 @@ class OperationWrapper {
     getHeaderParameters() {
         return this.getParametersByLocation('header');
     }
+    getCookieParameters() {
+        return this.getParametersByLocation('cookie');
+    }
     getParametersByLocation(loc) {
         return this.getParameters().filter((param) => param.in === loc);
     }
@@ -165,57 +169,12 @@ class OperationWrapper {
     }
 }
 
-class NameProvider {
-    getEnumConstantName(name) {
-        return pascalCase(name);
-    }
-    getTypeName(name) {
-        return pascalCase(name);
-    }
-    getNestedTypeName(parentName, name) {
-        return `${parentName}${pascalCase(name)}`;
-    }
-    getParametersTypeName(operationName) {
-        return `${pascalCase(operationName)}Params`;
-    }
-    getParameterTypeName(operationName, paramName) {
-        return `${this.getParametersTypeName(operationName)}${pascalCase(paramName)}`;
-    }
-    getNestedItemName(parentName) {
-        return `${parentName}ArrayItem`;
-    }
-    getNestedOneOfName(parentName, no) {
-        return `${parentName}OneOf${no}`;
-    }
-    getNestedAnyOfName(parentName, no) {
-        return `${parentName}AnyOf${no}`;
-    }
-    getNestedAllOfName(parentName, no) {
-        return `${parentName}AllOf${no}`;
-    }
-    getRequestBodyTypeName(operationName, method) {
-        return `${pascalCase(operationName)}${pascalCase(method)}RequestBody`;
-    }
-    getResponseTypeName(operationName, method) {
-        return `${pascalCase(operationName)}${pascalCase(method)}Response`;
-    }
-    getApiTypeName() {
-        return 'Api';
-    }
-    getApiImplName() {
-        return 'BaseApiImpl';
-    }
-    getOperatioName(id) {
-        return camelCase(id);
-    }
-}
-
 class TypeRegistry {
-    constructor(spec) {
+    constructor(spec, nameProvider) {
         this.types = [];
         this.operations = [];
-        this.nameProvider = new NameProvider();
         this.spec = spec;
+        this.nameProvider = nameProvider;
         this.registerOperations();
         this.registerTypes();
     }
@@ -440,8 +399,9 @@ class TypeRefGenerator extends BaseGenerator {
     }
     generateAnonymusObjectType(schema) {
         const fields = entries(schema.properties).map(([name, propSchema]) => {
+            const fieldName = isVarName(name) ? name : `'${name}'`;
             const colon = schema.required && schema.required.indexOf(name) >= 0 ? ':' : '?:';
-            return `${name}${colon}${this.generate(propSchema)}`;
+            return `${fieldName}${colon}${this.generate(propSchema)}`;
         });
         return `{${fields}}`;
     }
@@ -660,7 +620,7 @@ class UrlGenerator extends BaseGenerator {
         if (param.style && param.style !== 'simple') {
             throw new TypeError(`Only "simple" path parameters are allowed ("${param.style}" found}!`);
         }
-        const value = `params.${param.name}`;
+        const value = isVarName(param.name) ? `params.${param.name}` : `params['${param.name}']`;
         if (!param.schema || isSimpleType(param.schema)) {
             return value;
         }
@@ -726,7 +686,10 @@ class UrlGenerator extends BaseGenerator {
         return hasVars ? `\`${path$$1}\`` : `'${path$$1}'`;
     }
     generateWithoutQuerySegments(op) {
-        return `\`\${this.getBaseUrl()}/${this.generateUrlPath(op)}\``;
+        if (op.getPathParameters().length > 0) {
+            return `\`/${this.generateUrlPath(op)}\``;
+        }
+        return `'/${this.generateUrlPath(op)}'`;
     }
     generateWithQuerySegments(op) {
         const querySegments = this.generateUrlQuerySegments(op);
@@ -734,7 +697,7 @@ class UrlGenerator extends BaseGenerator {
       const querySegments = ${querySegments}
       const queryString = querySegments.filter((segment) => segment !== null).join('&')
       const query = queryString.length === 0 ? '' : \`?\${queryString}\`
-      return \`\${this.getBaseUrl()}/${this.generateUrlPath(op)}\${query}\`
+      return \`\/${this.generateUrlPath(op)}\${query}\`
     })()`;
     }
     generate(op) {
@@ -747,15 +710,65 @@ class UrlGenerator extends BaseGenerator {
     }
 }
 
+class HeadersGenerator extends BaseGenerator {
+    generateValueAccess(param) {
+        return isVarName(param.name) ? `params.${param.name}` : `params['${param.name}']`;
+    }
+    generateKey(param) {
+        return isVarName(param.name) ? param.name : `'${param.name}'`;
+    }
+    generateValue(param) {
+        if (param.style && param.style !== 'simple') {
+            throw new TypeError(`Only "simple" header parameters are allowed ("${param.style}" found}!`);
+        }
+        const value = this.generateValueAccess(param);
+        if (!param.schema || isSimpleType(param.schema)) {
+            return `String(${value})`;
+        }
+        else if (isArrayType(param.schema)) {
+            return `${value}.join(',')`;
+        }
+        else if (isObjectType(param.schema)) {
+            if (param.explode) {
+                return `Object.keys(${value}).map((key) => \`\${key}=${value}[\${key}]\`).join(',')`;
+            }
+            else {
+                return `Object.keys(${value}).map((key) => \`\${key},${value}[\${key}]\`).join(',')`;
+            }
+        }
+        else {
+            throw new TypeError(`Can't create serializer for param "${param.name}"`);
+        }
+    }
+    generateHeaderKeyValuePair(param) {
+        const requiredKVPair = `${this.generateKey(param)}: ${this.generateValue(param)}`;
+        if (param.required) {
+            return requiredKVPair;
+        }
+        else {
+            const value = this.generateValueAccess(param);
+            return `...(${value} === undefined ? {} : {${requiredKVPair}})`;
+        }
+    }
+    generate(op) {
+        const kvPairs = op
+            .getHeaderParameters()
+            .map((param) => this.generateHeaderKeyValuePair(param))
+            .join(',');
+        return `{ ${kvPairs} }`;
+    }
+}
+
 class OperationGenerator extends BaseGenerator {
     constructor(registry) {
         super(registry);
         this.signatureGenerator = new OperationSignatureGenerator(this.registry);
         this.handlerGenerator = new ResponseHandlerGenerator(this.registry);
         this.urlGenerator = new UrlGenerator(this.registry);
+        this.headersGenerator = new HeadersGenerator(this.registry);
     }
     generateHeadersValue(op) {
-        return `this.getDefaultHeaders()`;
+        return this.headersGenerator.generate(op);
     }
     generateBody(op) {
         const bodyType = this.signatureGenerator.generateBodyParameter(op);
@@ -771,7 +784,7 @@ class OperationGenerator extends BaseGenerator {
         headers: ${this.generateHeadersValue(op)},
         ${this.generateBody(op)}
       }
-      return this.client.execute(request).then(${this.handlerGenerator.generate(op)})`;
+      return this.adapter.execute(request).then(${this.handlerGenerator.generate(op)})`;
     }
     generate(id) {
         return `${this.signatureGenerator.generate(id)} {
@@ -788,13 +801,11 @@ class ApiGenerator extends BaseGenerator {
             .getOperationIds()
             .map((id) => opGenerator.generate(id))
             .join('\n');
-        return `export abstract class ${np.getApiImplName()} implements ${np.getApiTypeName()} {
-      private readonly client: __HttpClient 
-      constructor(client: __HttpClient) {
-        this.client = client
+        return `export class ${np.getApiImplName()} implements ${np.getApiTypeName()} {
+      private readonly adapter: __HttpAdapter 
+      constructor(adapter: __HttpAdapter) {
+        this.adapter = adapter
       }
-      abstract getBaseUrl(): string
-      abstract getDefaultHeaders(): {[key: string]: string}
       ${fns}
     }`;
     }
@@ -810,7 +821,8 @@ class ParameterTypeGenerator extends BaseGenerator {
             throw new TypeError(`Can't handle this!!!`);
         }
         const colon = param.required || param.in === 'path' ? ':' : '?:';
-        return `${param.name}${colon} ${this.refGenerator.generate(param.schema)}`;
+        const paramName = isVarName(param.name) ? param.name : `'${param.name}'`;
+        return `${paramName}${colon} ${this.refGenerator.generate(param.schema)}`;
     }
     generateParamsType(op) {
         const name = this.registry.getNameProvider().getParametersTypeName(op.operationId);
@@ -829,6 +841,9 @@ class ParameterTypeGenerator extends BaseGenerator {
 
 class ParameterTypesGenerator extends BaseGenerator {
     generate() {
+        if (this.registry.getOperations().some((op) => op.getCookieParameters().length > 0)) {
+            throw new Error(`Can't use Cookie parameters at the moment!`);
+        }
         const generator = new ParameterTypeGenerator(this.registry);
         return this.registry
             .getOperationIds()
@@ -841,7 +856,7 @@ class ParameterTypesGenerator extends BaseGenerator {
 const content = fs.readFileSync(path.join(__dirname, '../', 'StaticTypes.ts'), 'utf-8');
 class StaticTypesGenerator {
     generate() {
-        return content;
+        return content.trim();
     }
 }
 
@@ -863,11 +878,59 @@ class RootGenerator extends BaseGenerator {
         const generators = [
             new TypesGenerator(this.registry),
             new ParameterTypesGenerator(this.registry),
-            new ApiTypeGenerator(this.registry),
             new StaticTypesGenerator(),
+            new ApiTypeGenerator(this.registry),
             new ApiGenerator(this.registry),
         ];
         return this.format(generators.map((g) => g.generate()).join('\n'));
+    }
+}
+
+class NameProvider {
+    constructor(apiTypeName) {
+        this.apiTypeName = apiTypeName;
+    }
+    getEnumConstantName(name) {
+        return pascalCase(name);
+    }
+    getTypeName(name) {
+        return pascalCase(name);
+    }
+    getNestedTypeName(parentName, name) {
+        return `${parentName}${pascalCase(name)}`;
+    }
+    getParametersTypeName(operationName) {
+        return `${pascalCase(operationName)}Params`;
+    }
+    getParameterTypeName(operationName, paramName) {
+        return `${this.getParametersTypeName(operationName)}${pascalCase(paramName)}`;
+    }
+    getNestedItemName(parentName) {
+        return `${parentName}ArrayItem`;
+    }
+    getNestedOneOfName(parentName, no) {
+        return `${parentName}OneOf${no}`;
+    }
+    getNestedAnyOfName(parentName, no) {
+        return `${parentName}AnyOf${no}`;
+    }
+    getNestedAllOfName(parentName, no) {
+        return `${parentName}AllOf${no}`;
+    }
+    getRequestBodyTypeName(operationName, method) {
+        return `${pascalCase(operationName)}${pascalCase(method)}RequestBody`;
+    }
+    getResponseTypeName(operationName, method) {
+        return `${pascalCase(operationName)}${pascalCase(method)}Response`;
+    }
+    getApiTypeName() {
+        return this.apiTypeName;
+    }
+    getApiImplName() {
+        return `${this.getApiTypeName()}Impl`;
+    }
+    getOperatioName(id) {
+        return camelCase(id);
     }
 }
 
@@ -878,6 +941,12 @@ parser.addArgument(['--file', '-f'], {
     required: true,
     dest: 'file',
     help: 'Path to the .json file to be consumed.',
+});
+parser.addArgument(['--name', '-n'], {
+    required: false,
+    dest: 'apiTypeName',
+    help: 'Name of the generated type.',
+    defaultValue: 'Api',
 });
 class CliGenerator {
     constructor() {
@@ -902,7 +971,7 @@ class CliGenerator {
     }
     execute() {
         const schema = this.readSchema();
-        const registry = new TypeRegistry(schema);
+        const registry = new TypeRegistry(schema, new NameProvider(this.args.apiTypeName));
         const generator = new RootGenerator(registry);
         const source = generator.generate();
         this.writeOutput(source);

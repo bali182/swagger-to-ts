@@ -2,6 +2,10 @@ import pascalCase from 'pascalcase'
 import camelCase from 'camel-case'
 
 export class NameProvider {
+  private readonly apiTypeName: string
+  constructor(apiTypeName: string) {
+    this.apiTypeName = apiTypeName
+  }
   getEnumConstantName(name: string): string {
     return pascalCase(name)
   }
@@ -36,10 +40,10 @@ export class NameProvider {
     return `${pascalCase(operationName)}${pascalCase(method)}Response`
   }
   getApiTypeName(): string {
-    return 'Api'
+    return this.apiTypeName
   }
   getApiImplName(): string {
-    return 'BaseApiImpl'
+    return `${this.getApiTypeName()}Impl`
   }
   getOperatioName(id: string): string {
     return camelCase(id)

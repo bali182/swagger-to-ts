@@ -12,6 +12,6 @@ export type __HttpResponse = {
   header: __HttpHeaders
   body?: __HttpBody
 }
-export type __HttpClient = {
+export type __HttpAdapter = {
   execute(request: __HttpRequest): Promise<__HttpResponse>
 }

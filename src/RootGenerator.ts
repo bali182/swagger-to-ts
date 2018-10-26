@@ -10,8 +10,8 @@ export class RootGenerator extends BaseGenerator<void> {
     const generators = [
       new TypesGenerator(this.registry),
       new ParameterTypesGenerator(this.registry),
-      new ApiTypeGenerator(this.registry),
       new StaticTypesGenerator(),
+      new ApiTypeGenerator(this.registry),
       new ApiGenerator(this.registry),
     ]
     return this.format(generators.map((g) => g.generate()).join('\n'))

@@ -32,6 +32,9 @@ export class OperationWrapper {
   getHeaderParameters(): ParameterObject[] {
     return this.getParametersByLocation('header')
   }
+  getCookieParameters(): ParameterObject[] {
+    return this.getParametersByLocation('cookie')
+  }
   getParametersByLocation(loc: ParameterLocation): ParameterObject[] {
     return this.getParameters().filter((param) => param.in === loc)
   }

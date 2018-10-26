@@ -1,16 +1,18 @@
 import { BaseGenerator } from './BaseGenerator'
 import { OperationWrapper } from './OperationWrapper'
-import startsWith from 'lodash/startsWith'
-import endsWith from 'lodash/endsWith'
 import { ParameterObject } from 'openapi3-ts'
 import { isSimpleType, isArrayType, isObjectType } from './utils'
+
+import endsWith from 'lodash/endsWith'
+import startsWith from 'lodash/startsWith'
+import isVarName from 'is-var-name'
 
 export class UrlGenerator extends BaseGenerator<OperationWrapper> {
   generatePathSegment(param: ParameterObject): string {
     if (param.style && param.style !== 'simple') {
       throw new TypeError(`Only "simple" path parameters are allowed ("${param.style}" found}!`)
     }
-    const value = `params.${param.name}`
+    const value = isVarName(param.name) ? `params.${param.name}` : `params['${param.name}']`
     if (!param.schema || isSimpleType(param.schema)) {
       return value
     } else if (isArrayType(param.schema)) {
@@ -76,7 +78,10 @@ export class UrlGenerator extends BaseGenerator<OperationWrapper> {
   }
 
   generateWithoutQuerySegments(op: OperationWrapper) {
-    return `\`\${this.getBaseUrl()}/${this.generateUrlPath(op)}\``
+    if (op.getPathParameters().length > 0) {
+      return `\`/${this.generateUrlPath(op)}\``
+    }
+    return `'/${this.generateUrlPath(op)}'`
   }
 
   generateWithQuerySegments(op: OperationWrapper): string {
@@ -85,7 +90,7 @@ export class UrlGenerator extends BaseGenerator<OperationWrapper> {
       const querySegments = ${querySegments}
       const queryString = querySegments.filter((segment) => segment !== null).join('&')
       const query = queryString.length === 0 ? '' : \`?\${queryString}\`
-      return \`\${this.getBaseUrl()}/${this.generateUrlPath(op)}\${query}\`
+      return \`\/${this.generateUrlPath(op)}\${query}\`
     })()`
   }
 

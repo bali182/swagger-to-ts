@@ -18,9 +18,10 @@ export class TypeRegistry {
   private readonly types: TypeWrapper[] = []
   private readonly operations: OperationWrapper[] = []
   private readonly spec: OpenApiSpec
-  private readonly nameProvider: NameProvider = new NameProvider()
-  constructor(spec: OpenApiSpec) {
+  private readonly nameProvider: NameProvider
+  constructor(spec: OpenApiSpec, nameProvider: NameProvider) {
     this.spec = spec
+    this.nameProvider = nameProvider
     this.registerOperations()
     this.registerTypes()
   }

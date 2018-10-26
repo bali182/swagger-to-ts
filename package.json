@@ -15,7 +15,7 @@
     "build": "npm run build-main && npm run build-cli",
     "test": "mocha -r ts-node/register test/*.spec.ts",
     "tslint": "tslint -c tslint.json 'src/**/*.ts'",
-    "on-sample": "npm run build && node dist/cli.js -f petstore.yaml > petStoreApi.ts"
+    "on-sample": "npm run build && node dist/cli.js -f petstore.yaml -n PetStoreApi > petStoreApi.ts"
   },
   "repository": {
     "type": "git",
@@ -54,6 +54,7 @@
     "argparse": "^1.0.10",
     "camel-case": "^3.0.0",
     "constant-case": "^2.0.0",
+    "is-var-name": "^2.0.0",
     "lodash": "^4.17.11",
     "pascalcase": "^0.1.1",
     "prettier": "^1.14.2",

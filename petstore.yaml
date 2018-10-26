@@ -39,6 +39,21 @@ paths:
           schema:
             type: integer
             format: int32
+        - name: X-Froggo
+          in: header
+          schema:
+            type: string
+          required: true
+        - name: X-Request-ID
+          in: header
+          schema:
+            type: number
+          required: false
+        - name: X-Request-ID-2
+          in: header
+          schema:
+            type: boolean
+          required: false
       responses:
         '200':
           description: pet response

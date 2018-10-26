@@ -5,9 +5,11 @@ import { OpenApiSpec } from '@loopback/openapi-v3-types'
 import { TypeRegistry } from './TypeRegistry'
 import { RootGenerator } from './RootGenerator'
 import YAML from 'yamljs'
+import { NameProvider } from './NameProvider'
 
 type Args = {
   file: string
+  apiTypeName: string
 }
 
 const parser = new ArgumentParser({
@@ -18,6 +20,13 @@ parser.addArgument(['--file', '-f'], {
   required: true,
   dest: 'file',
   help: 'Path to the .json file to be consumed.',
+})
+
+parser.addArgument(['--name', '-n'], {
+  required: false,
+  dest: 'apiTypeName',
+  help: 'Name of the generated type.',
+  defaultValue: 'Api',
 })
 
 export class CliGenerator {
@@ -45,7 +54,7 @@ export class CliGenerator {
 
   execute(): void {
     const schema = this.readSchema()
-    const registry = new TypeRegistry(schema)
+    const registry = new TypeRegistry(schema, new NameProvider(this.args.apiTypeName))
     const generator = new RootGenerator(registry)
     const source = generator.generate()
     this.writeOutput(source)

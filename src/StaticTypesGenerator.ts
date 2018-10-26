@@ -6,6 +6,6 @@ const content = readFileSync(join(__dirname, '../', 'StaticTypes.ts'), 'utf-8')
 
 export class StaticTypesGenerator implements IGenerator<void> {
   generate() {
-    return content
+    return content.trim()
   }
 }
