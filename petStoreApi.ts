@@ -23,22 +23,33 @@ export type Api = {
   findPetById(params: FindPetByIdParams): Promise<Pet | Error>
   deletePet(params: DeletePetParams): Promise<void | Error>
 }
-export type __Request = {
+export type __HttpMethod = 'GET' | 'PUT' | 'POST' | 'DELETE' | 'OPTIONS' | 'HEAD' | 'PATCH' | 'TRACE'
+export type __HttpHeaders = { [key: string]: string }
+export type __HttpBody = string | null
+export type __HttpRequest = {
   url: string
-  method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'OPTIONS' | 'HEAD' | 'PATCH' | 'TRACE'
-  body?: string
-  headers: { [key: string]: string }
+  method: __HttpMethod
+  body?: __HttpBody
+  headers: __HttpHeaders
 }
-export type __Response = {
+export type __HttpResponse = {
   status: number
-  body?: string
+  header: __HttpHeaders
+  body?: __HttpBody
 }
+export type __HttpClient = {
+  execute(request: __HttpRequest): Promise<__HttpResponse>
+}
+
 export abstract class BaseApiImpl implements Api {
-  abstract execute(request: __Request): Promise<__Response>
+  private readonly client: __HttpClient
+  constructor(client: __HttpClient) {
+    this.client = client
+  }
   abstract getBaseUrl(): string
   abstract getDefaultHeaders(): { [key: string]: string }
   findPets(params: FindPetsParams): Promise<Pet[] | Error> {
-    const request: __Request = {
+    const request: __HttpRequest = {
       url: (() => {
         const querySegments = [
           params.tags === undefined || params.tags.length === 0 ? null : params.tags.map((e) => `tags=${e}`).join('&'),
@@ -51,8 +62,8 @@ export abstract class BaseApiImpl implements Api {
       method: 'GET',
       headers: this.getDefaultHeaders(),
     }
-    return this.execute(request).then(
-      ({ body, status }: __Response): Promise<Pet[] | Error> => {
+    return this.client.execute(request).then(
+      ({ body, status }: __HttpResponse): Promise<Pet[] | Error> => {
         switch (status) {
           case 200:
             return Promise.resolve(JSON.parse(body) as Pet[])
@@ -65,14 +76,14 @@ export abstract class BaseApiImpl implements Api {
     )
   }
   addPet(content: NewPet): Promise<Pet | Error> {
-    const request: __Request = {
+    const request: __HttpRequest = {
       url: `${this.getBaseUrl()}/pets`,
       method: 'POST',
       headers: this.getDefaultHeaders(),
       body: JSON.stringify(content),
     }
-    return this.execute(request).then(
-      ({ body, status }: __Response): Promise<Pet | Error> => {
+    return this.client.execute(request).then(
+      ({ body, status }: __HttpResponse): Promise<Pet | Error> => {
         switch (status) {
           case 200:
             return Promise.resolve(JSON.parse(body) as Pet)
@@ -85,13 +96,13 @@ export abstract class BaseApiImpl implements Api {
     )
   }
   findPetById(params: FindPetByIdParams): Promise<Pet | Error> {
-    const request: __Request = {
+    const request: __HttpRequest = {
       url: `${this.getBaseUrl()}/pets/${params.id}`,
       method: 'GET',
       headers: this.getDefaultHeaders(),
     }
-    return this.execute(request).then(
-      ({ body, status }: __Response): Promise<Pet | Error> => {
+    return this.client.execute(request).then(
+      ({ body, status }: __HttpResponse): Promise<Pet | Error> => {
         switch (status) {
           case 200:
             return Promise.resolve(JSON.parse(body) as Pet)
@@ -104,13 +115,13 @@ export abstract class BaseApiImpl implements Api {
     )
   }
   deletePet(params: DeletePetParams): Promise<void | Error> {
-    const request: __Request = {
+    const request: __HttpRequest = {
       url: `${this.getBaseUrl()}/pets/${params.id}`,
       method: 'DELETE',
       headers: this.getDefaultHeaders(),
     }
-    return this.execute(request).then(
-      ({ body, status }: __Response): Promise<void | Error> => {
+    return this.client.execute(request).then(
+      ({ body, status }: __HttpResponse): Promise<void | Error> => {
         switch (status) {
           case 204:
             return Promise.resolve()

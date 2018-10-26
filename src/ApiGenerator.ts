@@ -10,7 +10,10 @@ export class ApiGenerator extends BaseGenerator<void> {
       .map((id) => opGenerator.generate(id))
       .join('\n')
     return `export abstract class ${np.getApiImplName()} implements ${np.getApiTypeName()} {
-      abstract execute(request: __Request): Promise<__Response>
+      private readonly client: __HttpClient 
+      constructor(client: __HttpClient) {
+        this.client = client
+      }
       abstract getBaseUrl(): string
       abstract getDefaultHeaders(): {[key: string]: string}
       ${fns}

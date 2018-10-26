@@ -30,13 +30,13 @@ export class OperationGenerator extends BaseGenerator<string> {
   }
 
   generateOperationBody(op: OperationWrapper): string {
-    return `const request: __Request = {
+    return `const request: __HttpRequest = {
         url: ${this.urlGenerator.generate(op)},
         method: '${op.method.toUpperCase()}',
         headers: ${this.generateHeadersValue(op)},
         ${this.generateBody(op)}
       }
-      return this.execute(request).then(${this.handlerGenerator.generate(op)})`
+      return this.client.execute(request).then(${this.handlerGenerator.generate(op)})`
   }
 
   generate(id: string): string {

@@ -57,7 +57,7 @@ export class ResponseHandlerGenerator extends BaseGenerator<OperationWrapper> {
           .getResponseTypes()
           .map((t) => (t === null ? 'void' : this.refGenerator.generate(t)))
           .join('|')
-        return `({body, status}: __Response): Promise<${pType}> => {
+        return `({body, status}: __HttpResponse): Promise<${pType}> => {
           ${this.generateSwitch(op)}
         }`
     }

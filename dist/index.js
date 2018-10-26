@@ -13,6 +13,8 @@ var prettier = _interopDefault(require('prettier'));
 var last = _interopDefault(require('lodash/last'));
 var startsWith = _interopDefault(require('lodash/startsWith'));
 var endsWith = _interopDefault(require('lodash/endsWith'));
+var fs = require('fs');
+var path = require('path');
 
 function unique(items) {
     const set = new Set(items);
@@ -314,8 +316,8 @@ class TypeRegistry {
         this.operations.push(new OperationWrapper(url, method, operation));
     }
     registerOperations() {
-        for (const [url, path] of entries(this.getSpec().paths)) {
-            const { get, put, post, delete: _delete, options, head, patch, trace } = path;
+        for (const [url, path$$1] of entries(this.getSpec().paths)) {
+            const { get, put, post, delete: _delete, options, head, patch, trace } = path$$1;
             get ? this.registerOperation(url, 'get', get) : null;
             put ? this.registerOperation(url, 'put', put) : null;
             post ? this.registerOperation(url, 'post', post) : null;
@@ -357,7 +359,7 @@ class TypeRefGenerator extends BaseGenerator {
         }
         if (isSchemaType(schema)) {
             if (this.registry.hasSchema(schema)) {
-                return this.generateRootType(schema);
+                return this.generateRegisteredType(schema);
             }
             else if (isSimpleType(schema)) {
                 return this.generatePrimitiveType(schema);
@@ -432,7 +434,7 @@ class TypeRefGenerator extends BaseGenerator {
                 return 'any';
         }
     }
-    generateRootType(schema) {
+    generateRegisteredType(schema) {
         return this.registry.getNameBySchema(schema);
     }
     generateAnonymusObjectType(schema) {
@@ -645,7 +647,7 @@ class ResponseHandlerGenerator extends BaseGenerator {
                     .getResponseTypes()
                     .map((t) => (t === null ? 'void' : this.refGenerator.generate(t)))
                     .join('|');
-                return `({body, status}: __Response): Promise<${pType}> => {
+                return `({body, status}: __HttpResponse): Promise<${pType}> => {
           ${this.generateSwitch(op)}
         }`;
         }
@@ -719,8 +721,8 @@ class UrlGenerator extends BaseGenerator {
         });
         return replacedSegments.join('/');
     }
-    quotePath(path, hasVars) {
-        return hasVars ? `\`${path}\`` : `'${path}'`;
+    quotePath(path$$1, hasVars) {
+        return hasVars ? `\`${path$$1}\`` : `'${path$$1}'`;
     }
     generateWithoutQuerySegments(op) {
         return `\`\${this.getBaseUrl()}/${this.generateUrlPath(op)}\``;
@@ -762,13 +764,13 @@ class OperationGenerator extends BaseGenerator {
         return 'body: JSON.stringify(content),';
     }
     generateOperationBody(op) {
-        return `const request: __Request = {
+        return `const request: __HttpRequest = {
         url: ${this.urlGenerator.generate(op)},
         method: '${op.method.toUpperCase()}',
         headers: ${this.generateHeadersValue(op)},
         ${this.generateBody(op)}
       }
-      return this.execute(request).then(${this.handlerGenerator.generate(op)})`;
+      return this.client.execute(request).then(${this.handlerGenerator.generate(op)})`;
     }
     generate(id) {
         return `${this.signatureGenerator.generate(id)} {
@@ -786,7 +788,10 @@ class ApiGenerator extends BaseGenerator {
             .map((id) => opGenerator.generate(id))
             .join('\n');
         return `export abstract class ${np.getApiImplName()} implements ${np.getApiTypeName()} {
-      abstract execute(request: __Request): Promise<__Response>
+      private readonly client: __HttpClient 
+      constructor(client: __HttpClient) {
+        this.client = client
+      }
       abstract getBaseUrl(): string
       abstract getDefaultHeaders(): {[key: string]: string}
       ${fns}
@@ -832,18 +837,10 @@ class ParameterTypesGenerator extends BaseGenerator {
     }
 }
 
+const content = fs.readFileSync(path.join(__dirname, '../', 'StaticTypes.ts'), 'utf-8');
 class StaticTypesGenerator {
     generate() {
-        return `export type __Request = {
-      url: string
-      method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'OPTIONS' | 'HEAD' | 'PATCH' | 'TRACE'
-      body?: string
-      headers: { [key: string]: string }
-    }
-    export type __Response = {
-      status: number
-      body?: string
-    }`;
+        return content;
     }
 }
 

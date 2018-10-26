@@ -26,7 +26,7 @@ export class TypeRefGenerator extends BaseGenerator<SchemaOrRef> {
     }
     if (isSchemaType(schema)) {
       if (this.registry.hasSchema(schema)) {
-        return this.generateRootType(schema)
+        return this.generateRegisteredType(schema)
       } else if (isSimpleType(schema)) {
         return this.generatePrimitiveType(schema)
       } else if (isPureMapType(schema)) {
@@ -104,7 +104,7 @@ export class TypeRefGenerator extends BaseGenerator<SchemaOrRef> {
     }
   }
 
-  generateRootType(schema: SchemaObject): string {
+  generateRegisteredType(schema: SchemaObject): string {
     return this.registry.getNameBySchema(schema)
   }
 
