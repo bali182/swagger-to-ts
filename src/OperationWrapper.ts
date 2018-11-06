@@ -4,8 +4,10 @@ import {
   ReferenceObject,
   ParameterObject,
   ParameterLocation,
+  OpenApiSpec,
 } from '@loopback/openapi-v3-types'
 import entries from 'lodash/entries'
+import last from 'lodash/last'
 import { isRefType, isRequestBody, isResponse, isParameter } from './utils'
 import { SchemaOrRef } from './typings'
 
@@ -15,13 +17,27 @@ export class OperationWrapper {
   public readonly url: string
   public readonly method: HTTPMethod
   public readonly operation: OperationObject
-  constructor(url: string, method: HTTPMethod, operation: OperationObject) {
+  private readonly spec: OpenApiSpec
+  constructor(url: string, method: HTTPMethod, operation: OperationObject, spec: OpenApiSpec) {
     this.url = url
     this.method = method
     this.operation = operation
+    this.spec = spec
   }
   getParameters(): ParameterObject[] {
-    return (this.operation.parameters || []).filter(isParameter).map((param) => param as ParameterObject)
+    const params: (ParameterObject | ReferenceObject)[] = this.operation.parameters || []
+    return params.map((paramOrRef) => {
+      if (isParameter(paramOrRef)) {
+        return paramOrRef
+      } else if (isRefType(paramOrRef)) {
+        const name = last(paramOrRef.$ref.split('/'))
+        const resolvedParam = this.spec.components.parameters[name]
+        if (!resolvedParam) {
+          throw new Error(`Missing param '${name}'!`)
+        }
+        return resolvedParam
+      }
+    })
   }
   getPathParameters(): ParameterObject[] {
     return this.getParametersByLocation('path')

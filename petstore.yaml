@@ -97,6 +97,7 @@ paths:
       description: Returns a user based on a single ID, if the user does not have access to the pet
       operationId: find pet by id
       parameters:
+        - $ref: '#/components/parameters/Froggo'
         - name: id
           in: path
           description: ID of pet to fetch
@@ -138,6 +139,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 components:
+  parameters:
+    Froggo:
+      name: froggo
+      in: query
+      description: ID of pet to fetch
+      required: true
+      schema:
+        type: integer
+        format: int64
   schemas:
     Pet:
       allOf:

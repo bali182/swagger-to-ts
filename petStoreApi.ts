@@ -15,6 +15,7 @@ export type FindPetsParams = {
   'X-Request-ID-2'?: boolean
 }
 export type FindPetByIdParams = {
+  froggo: number
   id: number
 }
 export type DeletePetParams = {
@@ -101,7 +102,12 @@ export class PetStoreApiImpl implements PetStoreApi {
   }
   findPetById(params: FindPetByIdParams): Promise<Pet | Error> {
     const request: __HttpRequest = {
-      url: `/pets/${params.id}`,
+      url: (() => {
+        const querySegments = [`froggo=${params.froggo}`]
+        const queryString = querySegments.filter((segment) => segment !== null).join('&')
+        const query = queryString.length === 0 ? '' : `?${queryString}`
+        return `/pets/${params.id}${query}`
+      })(),
       method: 'GET',
       headers: {},
     }

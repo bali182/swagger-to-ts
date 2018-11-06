@@ -1,10 +1,10 @@
 import { BaseGenerator } from './BaseGenerator'
 import { TypeRegistry } from './TypeRegistry'
 import { TypeRefGenerator } from './TypeRefGenerator'
-import { OperationObject } from 'openapi3-ts'
 import { RefOrParameter } from './typings'
 import { isRefType } from './utils'
 import isVarName from 'is-var-name'
+import { OperationWrapper } from './OperationWrapper'
 
 export class ParameterTypeGenerator extends BaseGenerator<string> {
   private readonly refGenerator: TypeRefGenerator
@@ -22,10 +22,10 @@ export class ParameterTypeGenerator extends BaseGenerator<string> {
     return `${paramName}${colon} ${this.refGenerator.generate(param.schema)}`
   }
 
-  generateParamsType(op: OperationObject): string {
-    const name = this.registry.getNameProvider().getParametersTypeName(op.operationId)
+  generateParamsType(op: OperationWrapper): string {
+    const name = this.registry.getNameProvider().getParametersTypeName(op.getId())
     return `export type ${name} = {
-      ${op.parameters.map((param) => this.generateParameterField(param))}
+      ${op.getParameters().map((param) => this.generateParameterField(param))}
     }`
   }
 
@@ -34,6 +34,6 @@ export class ParameterTypeGenerator extends BaseGenerator<string> {
     if (!op.operation.parameters || op.operation.parameters.length === 0) {
       return null
     }
-    return this.generateParamsType(op.operation)
+    return this.generateParamsType(op)
   }
 }

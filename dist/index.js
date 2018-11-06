@@ -7,8 +7,8 @@ function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'defau
 var keys = _interopDefault(require('lodash/keys'));
 var isNil = _interopDefault(require('lodash/isNil'));
 var entries = _interopDefault(require('lodash/entries'));
-var prettier = _interopDefault(require('prettier'));
 var last = _interopDefault(require('lodash/last'));
+var prettier = _interopDefault(require('prettier'));
 var isVarName = _interopDefault(require('is-var-name'));
 var pascalCase = _interopDefault(require('pascalcase'));
 var endsWith = _interopDefault(require('lodash/endsWith'));
@@ -74,13 +74,27 @@ function isParameter(input) {
 }
 
 class OperationWrapper {
-    constructor(url, method, operation) {
+    constructor(url, method, operation, spec) {
         this.url = url;
         this.method = method;
         this.operation = operation;
+        this.spec = spec;
     }
     getParameters() {
-        return (this.operation.parameters || []).filter(isParameter).map((param) => param);
+        const params = this.operation.parameters || [];
+        return params.map((paramOrRef) => {
+            if (isParameter(paramOrRef)) {
+                return paramOrRef;
+            }
+            else if (isRefType(paramOrRef)) {
+                const name = last(paramOrRef.$ref.split('/'));
+                const resolvedParam = this.spec.components.parameters[name];
+                if (!resolvedParam) {
+                    throw new Error(`Missing param '${name}'!`);
+                }
+                return resolvedParam;
+            }
+        });
     }
     getPathParameters() {
         return this.getParametersByLocation('path');
@@ -271,7 +285,7 @@ class TypeRegistry {
         }
     }
     registerOperation(url, method, operation) {
-        this.operations.push(new OperationWrapper(url, method, operation));
+        this.operations.push(new OperationWrapper(url, method, operation, this.spec));
     }
     registerOperations() {
         for (const [url, path$$1] of entries(this.getSpec().paths)) {
@@ -823,9 +837,9 @@ class ParameterTypeGenerator extends BaseGenerator {
         return `${paramName}${colon} ${this.refGenerator.generate(param.schema)}`;
     }
     generateParamsType(op) {
-        const name = this.registry.getNameProvider().getParametersTypeName(op.operationId);
+        const name = this.registry.getNameProvider().getParametersTypeName(op.getId());
         return `export type ${name} = {
-      ${op.parameters.map((param) => this.generateParameterField(param))}
+      ${op.getParameters().map((param) => this.generateParameterField(param))}
     }`;
     }
     generate(operationId) {
@@ -833,7 +847,7 @@ class ParameterTypeGenerator extends BaseGenerator {
         if (!op.operation.parameters || op.operation.parameters.length === 0) {
             return null;
         }
-        return this.generateParamsType(op.operation);
+        return this.generateParamsType(op);
     }
 }
 

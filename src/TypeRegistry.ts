@@ -131,7 +131,7 @@ export class TypeRegistry {
     }
   }
   protected registerOperation(url: string, method: HTTPMethod, operation: OperationObject): void {
-    this.operations.push(new OperationWrapper(url, method, operation))
+    this.operations.push(new OperationWrapper(url, method, operation, this.spec))
   }
   protected registerOperations() {
     for (const [url, path] of entries(this.getSpec().paths)) {
