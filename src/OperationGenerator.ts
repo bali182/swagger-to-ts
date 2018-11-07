@@ -29,7 +29,7 @@ export class OperationGenerator extends BaseGenerator<string> {
     if (bodyType === null) {
       return ''
     }
-    return 'body: JSON.stringify(content),'
+    return 'body: this.adapter.serialize(content),'
   }
 
   generateOperationBody(op: OperationWrapper): string {

@@ -9,9 +9,12 @@ export type __HttpRequest = {
 }
 export type __HttpResponse = {
   status: number
-  header: __HttpHeaders
+  headers: __HttpHeaders
   body?: __HttpBody
 }
 export type __HttpAdapter = {
   execute(request: __HttpRequest): Promise<__HttpResponse>
+  // TODO might need additional content type in the future.
+  serialize(input: any): string
+  deserialize<T>(body: string): T
 }

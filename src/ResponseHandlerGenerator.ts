@@ -16,7 +16,7 @@ export class ResponseHandlerGenerator extends BaseGenerator<OperationWrapper> {
       return ''
     } else if (types.every((t) => t !== null)) {
       const tString = types.map((t) => this.refGenerator.generate(t)).join('|')
-      return `JSON.parse(body) as ${tString}`
+      return `this.adapter.deserialize<${tString}>(request.body)`
     } else {
       throw new TypeError(`Can't handle multiple content-types!`)
     }
@@ -36,13 +36,17 @@ export class ResponseHandlerGenerator extends BaseGenerator<OperationWrapper> {
     })
     if (op.hasDefaultStatus()) {
       const value = this.generateReturnValue(op.getDefaultResponseTypes())
-      cases.push(`default: return status >= 200 && status < 300 ? Promise.resolve(${value}) : Promise.reject(${value})`)
+      cases.push(
+        `default: return response.status >= 200 && response.status < 300 ? Promise.resolve(${value}) : Promise.reject(${value})`,
+      )
+    } else {
+      cases.push(`default: return Promise.reject('Unexpected status!')`) // TODO
     }
     return cases.join('\n')
   }
 
   generateSwitch(op: OperationWrapper): string {
-    return `switch(status) {
+    return `switch(response.status) {
       ${this.generateSwitchBranches(op)}
     }`
   }
@@ -59,7 +63,7 @@ export class ResponseHandlerGenerator extends BaseGenerator<OperationWrapper> {
           .map((t) => this.refGenerator.generate(t))
           .join('|')
         const pType = rawPType.length > 0 ? rawPType : 'void'
-        return `({body, status}: __HttpResponse): Promise<${pType}> => {
+        return `(response: __HttpResponse): Promise<${pType}> => {
           ${this.generateSwitch(op)}
         }`
     }
