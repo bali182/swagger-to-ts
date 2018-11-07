@@ -80,6 +80,18 @@ export class OperationWrapper {
     }
     return Array.from(types)
   }
+  getResolvedResponseTypes(): SchemaOrRef[] {
+    const types: Set<SchemaOrRef> = new Set()
+    for (const [statusCodeStr, response] of entries(this.operation.responses || {})) {
+      const status: number = statusCodeStr === 'default' ? null : parseInt(statusCodeStr, 10)
+      if (status === null || (status >= 200 && status < 300)) {
+        for (const type of this._getResponseTypes(response)) {
+          types.add(type)
+        }
+      }
+    }
+    return Array.from(types)
+  }
   getResponseStatuses(): number[] {
     const statuses: number[] = []
     for (const [status] of entries(this.operation.responses || {})) {

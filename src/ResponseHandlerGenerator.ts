@@ -53,10 +53,12 @@ export class ResponseHandlerGenerator extends BaseGenerator<OperationWrapper> {
       case 0:
         return `() => Promise.resolve()`
       default:
-        const pType = op
-          .getResponseTypes()
-          .map((t) => (t === null ? 'void' : this.refGenerator.generate(t)))
+        const rawPType = op
+          .getResolvedResponseTypes()
+          .filter((t) => t !== null)
+          .map((t) => this.refGenerator.generate(t))
           .join('|')
+        const pType = rawPType.length > 0 ? rawPType : 'void'
         return `({body, status}: __HttpResponse): Promise<${pType}> => {
           ${this.generateSwitch(op)}
         }`

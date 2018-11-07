@@ -42,13 +42,16 @@ export class OperationSignatureGenerator extends BaseGenerator<string> {
   }
 
   generatePromiseInnerType(op: OperationWrapper): string {
-    const resTypes = op.getResponseTypes()
+    const resTypes = op.getResolvedResponseTypes()
     const { refGenerator } = this
     switch (resTypes.length) {
       case 0:
-        return `void`
+        return 'void'
       default:
-        return unique(resTypes.map((t) => (t === null ? 'void' : refGenerator.generate(t)))).join(' | ')
+        if (resTypes.every((t) => t === null)) {
+          return 'void'
+        }
+        return unique(resTypes.filter((t) => t !== null).map((t) => refGenerator.generate(t))).join(' | ')
     }
   }
 

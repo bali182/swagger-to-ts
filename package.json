@@ -15,7 +15,7 @@
     "build": "npm run build-main && npm run build-cli",
     "test": "mocha -r ts-node/register test/*.spec.ts",
     "tslint": "tslint -c tslint.json 'src/**/*.ts'",
-    "on-sample": "npm run build && node dist/cli.js -f petstore.yaml -n PetStoreApi > petStoreApi.ts"
+    "on-sample": "npm run build && node dist/cli.js -f schema.json -n FlowWriterApi > output.ts"
   },
   "repository": {
     "type": "git",

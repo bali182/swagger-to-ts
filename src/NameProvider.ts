@@ -48,4 +48,7 @@ export class NameProvider {
   getOperatioName(id: string): string {
     return camelCase(id)
   }
+  getTypeGuardName(typeName: string) {
+    return `is${pascalCase(typeName)}`
+  }
 }

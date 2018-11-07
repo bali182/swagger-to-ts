@@ -15,6 +15,7 @@ var endsWith = _interopDefault(require('lodash/endsWith'));
 var startsWith = _interopDefault(require('lodash/startsWith'));
 var fs = require('fs');
 var path = require('path');
+var flatMap = _interopDefault(require('lodash/flatMap'));
 
 function unique(items) {
     const set = new Set(items);
@@ -71,6 +72,26 @@ function isResponse(input) {
 }
 function isParameter(input) {
     return input instanceof Object && Boolean(input.in);
+}
+function getDiscriminator(inputShema, registry) {
+    if (!registry.hasSchema(inputShema)) {
+        return null;
+    }
+    const name = registry.getNameBySchema(inputShema);
+    for (const { schema } of registry.getTypes()) {
+        if (!schema.discriminator) {
+            continue;
+        }
+        const { mapping, propertyName } = schema.discriminator;
+        const entry = entries(mapping).find(([, ref]) => ref.endsWith(name));
+        if (entry) {
+            return { value: entry[0], propertyName };
+        }
+    }
+    return null;
+}
+function getRefName(ref) {
+    return last(ref.split('/'));
 }
 
 class OperationWrapper {
@@ -134,6 +155,18 @@ class OperationWrapper {
         for (const [, response] of entries(this.operation.responses || {})) {
             for (const type of this._getResponseTypes(response)) {
                 types.add(type);
+            }
+        }
+        return Array.from(types);
+    }
+    getResolvedResponseTypes() {
+        const types = new Set();
+        for (const [statusCodeStr, response] of entries(this.operation.responses || {})) {
+            const status = statusCodeStr === 'default' ? null : parseInt(statusCodeStr, 10);
+            if (status === null || (status >= 200 && status < 300)) {
+                for (const type of this._getResponseTypes(response)) {
+                    types.add(type);
+                }
             }
         }
         return Array.from(types);
@@ -432,9 +465,6 @@ class TypeGenerator extends BaseGenerator {
         else if (isArrayType(schema)) {
             return this.generateArrayType(name);
         }
-        else if (isObjectType(schema)) {
-            return this.generateTypeDeclaration(name);
-        }
         else if (isOneOfType(schema)) {
             return this.generateOneOfType(name);
         }
@@ -443,6 +473,9 @@ class TypeGenerator extends BaseGenerator {
         }
         else if (isAnyOfType(schema)) {
             return this.generateAnyOfType(name);
+        }
+        else if (isObjectType(schema)) {
+            return this.generateTypeDeclaration(name);
         }
         throw new TypeError(`${name} is of unknown type, cannot be generated`);
     }
@@ -458,12 +491,20 @@ class TypeGenerator extends BaseGenerator {
         return `${name}${colon}${this.typeRefGenerator.generate(schema)}`;
     }
     generateTypeDeclarationFields(schema) {
-        return entries(schema.properties || {})
+        const discriminator = getDiscriminator(schema, this.registry);
+        const fields = entries(schema.properties || {})
             .map(([name, subSchema]) => {
+            if (discriminator && discriminator.propertyName === name) {
+                return null;
+            }
             const isRequired = schema.required && schema.required.indexOf(name) >= 0;
             return this.generateTypeDeclarationField(name, subSchema, isRequired);
         })
-            .join(';\n');
+            .filter((field) => field !== null);
+        const allFields = discriminator
+            ? [`${discriminator.propertyName}: '${discriminator.value}'`].concat(fields)
+            : fields;
+        return allFields.join(';\n');
     }
     generateTypeBody(schema) {
         return `{${this.generateTypeDeclarationFields(schema)}}`;
@@ -554,13 +595,16 @@ class OperationSignatureGenerator extends BaseGenerator {
         return `Promise<${this.generatePromiseInnerType(op)}>`;
     }
     generatePromiseInnerType(op) {
-        const resTypes = op.getResponseTypes();
+        const resTypes = op.getResolvedResponseTypes();
         const { refGenerator } = this;
         switch (resTypes.length) {
             case 0:
-                return `void`;
+                return 'void';
             default:
-                return unique(resTypes.map((t) => (t === null ? 'void' : refGenerator.generate(t)))).join(' | ');
+                if (resTypes.every((t) => t === null)) {
+                    return 'void';
+                }
+                return unique(resTypes.filter((t) => t !== null).map((t) => refGenerator.generate(t))).join(' | ');
         }
     }
     generate(id) {
@@ -616,10 +660,12 @@ class ResponseHandlerGenerator extends BaseGenerator {
             case 0:
                 return `() => Promise.resolve()`;
             default:
-                const pType = op
-                    .getResponseTypes()
-                    .map((t) => (t === null ? 'void' : this.refGenerator.generate(t)))
+                const rawPType = op
+                    .getResolvedResponseTypes()
+                    .filter((t) => t !== null)
+                    .map((t) => this.refGenerator.generate(t))
                     .join('|');
+                const pType = rawPType.length > 0 ? rawPType : 'void';
                 return `({body, status}: __HttpResponse): Promise<${pType}> => {
           ${this.generateSwitch(op)}
         }`;
@@ -885,11 +931,40 @@ class ApiTypeGenerator extends BaseGenerator {
     }
 }
 
+class TypeGuardsGenerator extends BaseGenerator {
+    generate() {
+        const types = this.registry.getTypes().filter((type) => this.needsTypeGuard(type.schema));
+        return flatMap(types, (type) => {
+            return entries(type.schema.discriminator.mapping).map(([propertyValue, ref]) => {
+                const baseTypeName = type.name;
+                const checkedTypeName = getRefName(ref);
+                const propertyName = type.schema.discriminator.propertyName;
+                return this.generateTypeGuard(baseTypeName, checkedTypeName, propertyName, propertyValue);
+            });
+        }).join('\n');
+    }
+    generateTypeGuard(baseTypeName, checkedTypeName, propertyName, propertyValue) {
+        const np = this.registry.getNameProvider();
+        const tgName = np.getTypeGuardName(checkedTypeName);
+        return `export function ${tgName}(input: ${baseTypeName}): input is ${checkedTypeName} {
+      return input && (input as any).${propertyName} === '${propertyValue}'
+    }`;
+    }
+    needsTypeGuard(type) {
+        return (isOneOfType(type) &&
+            isObjectType(type) &&
+            Boolean(type.discriminator) &&
+            Boolean(type.discriminator.mapping) &&
+            Boolean(type.discriminator.propertyName));
+    }
+}
+
 class RootGenerator extends BaseGenerator {
     generate() {
         const generators = [
             new TypesGenerator(this.registry),
             new ParameterTypesGenerator(this.registry),
+            new TypeGuardsGenerator(this.registry),
             new StaticTypesGenerator(),
             new ApiTypeGenerator(this.registry),
             new ApiGenerator(this.registry),

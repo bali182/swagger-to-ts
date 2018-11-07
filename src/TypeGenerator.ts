@@ -1,6 +1,15 @@
 import { SchemaObject } from '@loopback/openapi-v3-types'
 import entries from 'lodash/entries'
-import { isEnumType, isObjectType, isArrayType, isOneOfType, isAllOfType, isAnyOfType, isRefType } from './utils'
+import {
+  isEnumType,
+  isObjectType,
+  isArrayType,
+  isOneOfType,
+  isAllOfType,
+  isAnyOfType,
+  isRefType,
+  getDiscriminator,
+} from './utils'
 import { BaseGenerator } from './BaseGenerator'
 import { SchemaOrRef } from './typings'
 import { TypeRegistry } from './TypeRegistry'
@@ -18,14 +27,14 @@ export class TypeGenerator extends BaseGenerator<string> {
       return this.generateConstEnum(name)
     } else if (isArrayType(schema)) {
       return this.generateArrayType(name)
-    } else if (isObjectType(schema)) {
-      return this.generateTypeDeclaration(name)
     } else if (isOneOfType(schema)) {
       return this.generateOneOfType(name)
     } else if (isAllOfType(schema)) {
       return this.generateAllOfType(name)
     } else if (isAnyOfType(schema)) {
       return this.generateAnyOfType(name)
+    } else if (isObjectType(schema)) {
+      return this.generateTypeDeclaration(name)
     }
     throw new TypeError(`${name} is of unknown type, cannot be generated`)
   }
@@ -44,12 +53,20 @@ export class TypeGenerator extends BaseGenerator<string> {
   }
 
   generateTypeDeclarationFields(schema: SchemaObject): string {
-    return entries(schema.properties || {})
+    const discriminator = getDiscriminator(schema, this.registry)
+    const fields = entries(schema.properties || {})
       .map(([name, subSchema]) => {
+        if (discriminator && discriminator.propertyName === name) {
+          return null
+        }
         const isRequired = schema.required && schema.required.indexOf(name) >= 0
         return this.generateTypeDeclarationField(name, subSchema, isRequired)
       })
-      .join(';\n')
+      .filter((field) => field !== null)
+    const allFields = discriminator
+      ? [`${discriminator.propertyName}: '${discriminator.value}'`].concat(fields)
+      : fields
+    return allFields.join(';\n')
   }
 
   generateTypeBody(schema: SchemaObject): string {

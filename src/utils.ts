@@ -7,6 +7,9 @@ import {
 } from '@loopback/openapi-v3-types'
 import keys from 'lodash/keys'
 import isNil from 'lodash/isNil'
+import entries from 'lodash/entries'
+import last from 'lodash/last'
+import { TypeRegistry } from './TypeRegistry'
 
 export function unique<T>(items: T[]): T[] {
   const set = new Set(items)
@@ -70,4 +73,28 @@ export function isResponse(input: any): input is ResponseObject {
 }
 export function isParameter(input: any): input is ParameterObject {
   return input instanceof Object && Boolean(input.in)
+}
+export type DiscriminatorInfo = {
+  propertyName: string
+  value: string
+}
+export function getDiscriminator(inputShema: SchemaObject, registry: TypeRegistry): DiscriminatorInfo {
+  if (!registry.hasSchema(inputShema)) {
+    return null
+  }
+  const name = registry.getNameBySchema(inputShema)
+  for (const { schema } of registry.getTypes()) {
+    if (!schema.discriminator) {
+      continue
+    }
+    const { mapping, propertyName } = schema.discriminator
+    const entry = entries(mapping).find(([, ref]) => ref.endsWith(name))
+    if (entry) {
+      return { value: entry[0], propertyName }
+    }
+  }
+  return null
+}
+export function getRefName(ref: string): string {
+  return last(ref.split('/'))
 }
