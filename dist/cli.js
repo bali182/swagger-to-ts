@@ -75,22 +75,41 @@ function isResponse(input) {
 function isParameter(input) {
     return input instanceof Object && Boolean(input.in);
 }
-function getDiscriminator(inputShema, registry) {
-    if (!registry.hasSchema(inputShema)) {
+function getDiscriminator(inputSchema, registry) {
+    if (!registry.hasSchema(inputSchema)) {
         return null;
     }
-    const name = registry.getNameBySchema(inputShema);
-    for (const { schema } of registry.getTypes()) {
+    const name = registry.getNameBySchema(inputSchema);
+    for (const { name: parentName, schema } of registry.getTypes()) {
         if (!schema.discriminator) {
             continue;
         }
         const { mapping, propertyName } = schema.discriminator;
-        const entry = entries(mapping).find(([, ref]) => ref.endsWith(name));
+        const entry = entries(mapping).find(([, ref]) => getRefName(ref) === name);
         if (entry) {
-            return { value: entry[0], propertyName };
+            return { value: entry[0], propertyName, parentName };
         }
     }
     return null;
+}
+function getDiscriminatorsInternal(inputSchema, registry, discriminators) {
+    const discriminator = getDiscriminator(inputSchema, registry);
+    if (discriminator === null) {
+        return;
+    }
+    if (discriminators.some((d) => d.parentName === discriminator.parentName)) {
+        return;
+    }
+    discriminators.push(discriminator);
+    if (registry.hasSchemaName(discriminator.parentName)) {
+        const parentSchema = registry.getSchemaByName(discriminator.parentName);
+        getDiscriminatorsInternal(parentSchema, registry, discriminators);
+    }
+}
+function getDiscriminators(inputSchema, registry) {
+    const discriminators = [];
+    getDiscriminatorsInternal(inputSchema, registry, discriminators);
+    return discriminators;
 }
 function getRefName(ref) {
     return last(ref.split('/'));
@@ -494,19 +513,17 @@ class TypeGenerator extends BaseGenerator {
         return `${name}${colon}${this.typeRefGenerator.generate(schema)}`;
     }
     generateTypeDeclarationFields(schema) {
-        const discriminator = getDiscriminator(schema, this.registry);
+        const discriminators = getDiscriminators(schema, this.registry);
         const fields = entries(schema.properties || {})
             .map(([name, subSchema]) => {
-            if (discriminator && discriminator.propertyName === name) {
+            if (discriminators.some((d) => d.propertyName === name)) {
                 return null;
             }
             const isRequired = schema.required && schema.required.indexOf(name) >= 0;
             return this.generateTypeDeclarationField(name, subSchema, isRequired);
         })
             .filter((field) => field !== null);
-        const allFields = discriminator
-            ? [`${discriminator.propertyName}: '${discriminator.value}'`].concat(fields)
-            : fields;
+        const allFields = discriminators.map((d) => `${d.propertyName}: '${d.value}'`).concat(fields);
         return allFields.join(';\n');
     }
     generateTypeBody(schema) {

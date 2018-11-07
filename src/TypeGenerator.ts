@@ -8,7 +8,7 @@ import {
   isAllOfType,
   isAnyOfType,
   isRefType,
-  getDiscriminator,
+  getDiscriminators,
 } from './utils'
 import { BaseGenerator } from './BaseGenerator'
 import { SchemaOrRef } from './typings'
@@ -54,19 +54,17 @@ export class TypeGenerator extends BaseGenerator<string> {
   }
 
   generateTypeDeclarationFields(schema: SchemaObject): string {
-    const discriminator = getDiscriminator(schema, this.registry)
+    const discriminators = getDiscriminators(schema, this.registry)
     const fields = entries(schema.properties || {})
       .map(([name, subSchema]) => {
-        if (discriminator && discriminator.propertyName === name) {
+        if (discriminators.some((d) => d.propertyName === name)) {
           return null
         }
         const isRequired = schema.required && schema.required.indexOf(name) >= 0
         return this.generateTypeDeclarationField(name, subSchema, isRequired)
       })
       .filter((field) => field !== null)
-    const allFields = discriminator
-      ? [`${discriminator.propertyName}: '${discriminator.value}'`].concat(fields)
-      : fields
+    const allFields = discriminators.map((d) => `${d.propertyName}: '${d.value}'`).concat(fields)
     return allFields.join(';\n')
   }
 

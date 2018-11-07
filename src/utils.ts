@@ -75,25 +75,50 @@ export function isParameter(input: any): input is ParameterObject {
   return input instanceof Object && Boolean(input.in)
 }
 export type DiscriminatorInfo = {
+  parentName: string
   propertyName: string
   value: string
 }
-export function getDiscriminator(inputShema: SchemaObject, registry: TypeRegistry): DiscriminatorInfo {
-  if (!registry.hasSchema(inputShema)) {
+function getDiscriminator(inputSchema: SchemaObject, registry: TypeRegistry): DiscriminatorInfo {
+  if (!registry.hasSchema(inputSchema)) {
     return null
   }
-  const name = registry.getNameBySchema(inputShema)
-  for (const { schema } of registry.getTypes()) {
+  const name = registry.getNameBySchema(inputSchema)
+  for (const { name: parentName, schema } of registry.getTypes()) {
     if (!schema.discriminator) {
       continue
     }
     const { mapping, propertyName } = schema.discriminator
-    const entry = entries(mapping).find(([, ref]) => ref.endsWith(name))
+    const entry = entries(mapping).find(([, ref]) => getRefName(ref) === name)
     if (entry) {
-      return { value: entry[0], propertyName }
+      return { value: entry[0], propertyName, parentName }
     }
   }
   return null
+}
+function getDiscriminatorsInternal(
+  inputSchema: SchemaObject,
+  registry: TypeRegistry,
+  discriminators: DiscriminatorInfo[],
+): void {
+  const discriminator = getDiscriminator(inputSchema, registry)
+  if (discriminator === null) {
+    return
+  }
+  if (discriminators.some((d) => d.parentName === discriminator.parentName)) {
+    return
+  }
+  discriminators.push(discriminator)
+  if (registry.hasSchemaName(discriminator.parentName)) {
+    const parentSchema = registry.getSchemaByName(discriminator.parentName)
+    getDiscriminatorsInternal(parentSchema, registry, discriminators)
+  }
+}
+
+export function getDiscriminators(inputSchema: SchemaObject, registry: TypeRegistry): DiscriminatorInfo[] {
+  const discriminators: DiscriminatorInfo[] = []
+  getDiscriminatorsInternal(inputSchema, registry, discriminators)
+  return discriminators
 }
 export function getRefName(ref: string): string {
   return last(ref.split('/'))
