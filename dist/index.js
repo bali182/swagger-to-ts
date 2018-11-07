@@ -477,7 +477,8 @@ class TypeGenerator extends BaseGenerator {
         else if (isObjectType(schema)) {
             return this.generateTypeDeclaration(name);
         }
-        throw new TypeError(`${name} is of unknown type, cannot be generated`);
+        console.error(`${name} is of unknown type, cannot be generated`);
+        return null;
     }
     generateConstEnum(name) {
         const schema = this.registry.getSchemaByName(name);
@@ -559,6 +560,7 @@ class TypesGenerator extends BaseGenerator {
         return this.registry
             .getTypeNames()
             .map((name) => typeGenerator.generate(name))
+            .filter((code) => code !== null)
             .join('\n');
     }
 }
@@ -947,7 +949,7 @@ class TypeGuardsGenerator extends BaseGenerator {
         const np = this.registry.getNameProvider();
         const tgName = np.getTypeGuardName(checkedTypeName);
         return `export function ${tgName}(input: ${baseTypeName}): input is ${checkedTypeName} {
-      return input && (input as any).${propertyName} === '${propertyValue}'
+      return input && input.${propertyName} === '${propertyValue}'
     }`;
     }
     needsTypeGuard(type) {

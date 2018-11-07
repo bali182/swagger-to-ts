@@ -36,7 +36,8 @@ export class TypeGenerator extends BaseGenerator<string> {
     } else if (isObjectType(schema)) {
       return this.generateTypeDeclaration(name)
     }
-    throw new TypeError(`${name} is of unknown type, cannot be generated`)
+    console.error(`${name} is of unknown type, cannot be generated`)
+    return null
   }
 
   generateConstEnum(name: string): string {

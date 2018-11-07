@@ -7,6 +7,7 @@ export class TypesGenerator extends BaseGenerator<void> {
     return this.registry
       .getTypeNames()
       .map((name) => typeGenerator.generate(name))
+      .filter((code) => code !== null)
       .join('\n')
   }
 }

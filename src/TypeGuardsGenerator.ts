@@ -26,7 +26,7 @@ export class TypeGuardsGenerator extends BaseGenerator<void> {
     const np = this.registry.getNameProvider()
     const tgName = np.getTypeGuardName(checkedTypeName)
     return `export function ${tgName}(input: ${baseTypeName}): input is ${checkedTypeName} {
-      return input && (input as any).${propertyName} === '${propertyValue}'
+      return input && input.${propertyName} === '${propertyValue}'
     }`
   }
 
