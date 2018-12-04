@@ -10,6 +10,7 @@
     "test": "test"
   },
   "scripts": {
+    "pre-commit": "npm run build && git add .",
     "build-cli": "rollup -c rollup.cli.config.js",
     "build-main": "rollup -c rollup.main.config.js",
     "build": "npm run build-main && npm run build-cli",
@@ -43,6 +44,7 @@
     "@types/node": "^7.0.69",
     "@types/yamljs": "^0.2.30",
     "chai": "^4.1.2",
+    "husky": "^1.2.0",
     "mocha": "^5.2.0",
     "rollup": "^0.65.0",
     "rollup-plugin-typescript2": "^0.17.0",
