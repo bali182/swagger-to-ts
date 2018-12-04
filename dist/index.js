@@ -502,7 +502,7 @@ class TypeGenerator extends BaseGenerator {
     generateConstEnum(name) {
         const schema = this.registry.getSchemaByName(name);
         const np = this.registry.getNameProvider();
-        return `export const enum ${name} {
+        return `export enum ${name} {
       ${schema.enum.map((value) => `${np.getEnumConstantName(value)} = '${value}'`).join(',')}
     }`;
     }
