@@ -16,7 +16,7 @@ export class ResponseHandlerGenerator extends BaseGenerator<OperationWrapper> {
       return ''
     } else if (types.every((t) => t !== null)) {
       const tString = types.map((t) => this.refGenerator.generate(t)).join('|')
-      return `this.adapter.deserialize<${tString}>(request.body)`
+      return `this.adapter.deserialize<${tString}>(response.body)`
     } else {
       throw new TypeError(`Can't handle multiple content-types!`)
     }
