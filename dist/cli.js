@@ -1059,14 +1059,14 @@ class ValidatorGenerator extends BaseGenerator {
     schemaValidators(schema) {
         if (isOneOfType(schema)) {
             if (schema.discriminator) {
-                return this.oneOfValidator(schema);
+                return this.oneOfValidator('input', schema);
             }
             if (schema.oneOf.length === 1) {
                 const oneOf = schema.oneOf[0];
                 const name = isRefType(oneOf) ? getRefName(oneOf.$ref) : this.registry.getNameBySchema(oneOf);
                 const validatorName = this.registry.getNameProvider().getValidatorName(name);
                 return `if(!(input instanceof Object)) {
-          results.push({ message: '${name} should be an object', path })
+          results.push({ path, message: '${name} should be an object' })
         }
         results.push(...${validatorName}(input, path))`;
             }
@@ -1081,36 +1081,46 @@ class ValidatorGenerator extends BaseGenerator {
     }
     objectValidator(schema) {
         const name = this.registry.getNameBySchema(schema);
-        const objectCheck = `if(!(input instanceof Object)) {
-      results.push({ message: '${name} should be an object', path })
-    }`;
-        const props = entries(schema.properties || {})
+        const validators = [];
+        entries(schema.properties || {})
             .filter(([name]) => name !== 'traversableAgain' && name !== 'empty') // TODO scala collection bullshit
             .map(([name, propSchema]) => this.propertyValidator(name, propSchema, schema.required && schema.required.indexOf(name) >= 0))
-            .filter((str) => str !== null && str.length > 0);
-        return [objectCheck].concat(props).join('\n');
+            .filter((str) => str !== null && str.length > 0)
+            .forEach((v) => validators.push(v));
+        const discriminators = getDiscriminators(schema, this.registry);
+        if (discriminators && discriminators.length > 0) {
+            discriminators.forEach(({ propertyName, value }) => validators.push(this.discriminatorValidator(`\${path}.${propertyName}`, accessor('input', propertyName), value, propertyName)));
+        }
+        return `if(input === null || input === undefined || !(input instanceof Object)) {
+      results.push({ path, message: '${name} should be an object' })
+    } else {
+      ${validators.join('\n')}
+    }`;
     }
     enumValidator(schema) {
         const name = this.registry.getNameBySchema(schema);
         const stringCheck = `if (typeof input !== 'string') {
-      results.push({ message: '${name} should represented as a string', path })
+      results.push({ path, message: '${name} should represented as a string' })
     }`;
         const values$$1 = `${schema.enum.map((v) => `"${v}"`).join(', ')}`;
         const enumValueCheck = `if([${values$$1}].indexOf(input) < 0) {
-      results.push({ message: '${name} should be one of ${values$$1}', path})
+      results.push({ path, message: '${name} should be one of ${values$$1}'})
     }`;
         return [stringCheck, enumValueCheck].join('\n');
     }
-    oneOfValidator(schema) {
+    oneOfValidator(path$$1, schema) {
         const name = this.registry.getNameBySchema(schema);
         const { mapping, propertyName } = schema.discriminator;
-        return `if(!(input instanceof Object)) {
-      results.push({ message: '${name} should be an object', path })
-    }
-    switch(input.${propertyName}) {
-      ${entries(mapping)
+        const defaultPath = `${path$$1}.${propertyName}`;
+        return `if(input === null || input === undefined || !(input instanceof Object)) {
+      results.push({ path, message: '${name} should be an object' })
+    } else {
+      switch(input.${propertyName}) {
+        ${entries(mapping)
             .map(([value, ref]) => this.oneOfDispatcher(value, ref))
             .join('\n')}
+        default: results.push({ message: \`Unexpected discriminator \${(input as any).${propertyName}}\`, path: \`${defaultPath}\`})
+      }
     }`;
     }
     oneOfDispatcher(value, ref) {
@@ -1121,15 +1131,23 @@ class ValidatorGenerator extends BaseGenerator {
         const validators = [];
         const path$$1 = `\${path}.${prop}`;
         if (required) {
-            validators.push(this.requiredPropertyValidator(prop, path$$1, 'input'));
+            validators.push(this.requiredPropertyValidator(path$$1, accessor('input', prop)));
         }
         const schema = isRefType(propSchema) ? this.registry.resolveRef(propSchema) : propSchema;
         return this.propValidator(path$$1, accessor('input', prop), schema);
     }
+    discriminatorValidator(path$$1, varName, value, prop) {
+        return `if(${varName} !== '${value}') {
+      results.push({message: '${prop} should be "${value}"', path: \`${path$$1}\`})
+    }`;
+    }
     propValidator(path$$1, varName, schema) {
         const validators = [];
         if (schema) {
-            if (isSimpleType(schema)) {
+            if (isObjectType(schema) || isEnumType(schema)) {
+                validators.push(this.referenceValidator(path$$1, varName, schema));
+            }
+            else if (isSimpleType(schema)) {
                 switch (schema.type) {
                     case PrimitiveType.string: {
                         validators.push(this.stringPropertyValidator(path$$1, varName));
@@ -1154,9 +1172,6 @@ class ValidatorGenerator extends BaseGenerator {
                         break;
                     }
                 }
-            }
-            else if (isObjectType(schema)) {
-                validators.push(this.referenceValidator(path$$1, varName, schema));
             }
             else if (isArrayType(schema)) {
                 validators.push(this.arrayValidator(path$$1, varName, schema));
@@ -1192,9 +1207,9 @@ class ValidatorGenerator extends BaseGenerator {
       results.push(...${np.getValidatorName(name)}(${varName}, \`${path$$1}\`))
     }`;
     }
-    requiredPropertyValidator(prop, path$$1, varName) {
-        return `if(${varName}.${prop} === null || ${varName}.${prop} === undefined) {
-      results.push({ message: '${prop} is required!', path: \`${path$$1}\`})
+    requiredPropertyValidator(path$$1, varName) {
+        return `if(${varName} === null || ${varName} === undefined) {
+      results.push({ message: 'This field is required!', path: \`${path$$1}\`})
     }`;
     }
     minLengthChecker(message) {
@@ -1211,7 +1226,6 @@ class ValidatorGenerator extends BaseGenerator {
       }`;
         };
     }
-    minChecker(path$$1, varName, min) { }
     basicTypeCheckerValidator(type) {
         return (path$$1, varName) => {
             return `if(${this.presenceCheckCondition(varName)} && typeof ${varName} !== '${type}') {
