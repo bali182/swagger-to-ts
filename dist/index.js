@@ -1082,7 +1082,7 @@ class ValidatorGenerator extends BaseGenerator {
         const validators = [];
         const discriminators = getDiscriminators(schema, this.registry);
         if (discriminators && discriminators.length > 0) {
-            discriminators.forEach(({ propertyName, value }) => validators.push(this.discriminatorValidator(`\${path}.${propertyName}`, accessor('input', propertyName), value, propertyName)));
+            discriminators.forEach(({ propertyName, value }) => validators.push(this.discriminatorValidator(`\${path}.${propertyName}`, accessor('input', propertyName), value)));
         }
         entries(schema.properties || {})
             .filter(([name]) => name !== 'traversableAgain' && name !== 'empty') // TODO scala collection bullshit
@@ -1118,7 +1118,7 @@ class ValidatorGenerator extends BaseGenerator {
         ${entries(mapping)
             .map(([value, ref]) => this.oneOfDispatcher(value, ref))
             .join('\n')}
-        default: results.push({ message: \`Unexpected discriminator "\${(input as any).${propertyName}}"!\`, path: \`${defaultPath}\`})
+        default: results.push({ path: \`${defaultPath}\`, message: \`Unexpected discriminator "\${(input as any).${propertyName}}"!\` })
       }
     }`;
     }
@@ -1136,9 +1136,9 @@ class ValidatorGenerator extends BaseGenerator {
         validators.push(this.propValidator(path$$1, accessor('input', prop), schema));
         return validators.join('\n');
     }
-    discriminatorValidator(path$$1, varName, value, prop) {
+    discriminatorValidator(path$$1, varName, value) {
         return `if(${varName} !== '${value}') {
-      results.push({message: 'Should be "${value}"!', path: \`${path$$1}\`})
+      results.push({path: \`${path$$1}\`, message: 'Should be "${value}"!'})
     }`;
     }
     propValidator(path$$1, varName, schema) {
@@ -1209,27 +1209,27 @@ class ValidatorGenerator extends BaseGenerator {
     }
     requiredPropertyValidator(path$$1, varName) {
         return `if(${varName} === null || ${varName} === undefined) {
-      results.push({ message: 'Should not be empty!', path: \`${path$$1}\`})
+      results.push({ path: \`${path$$1}\`, message: 'Should not be empty!'})
     }`;
     }
     minLengthChecker(message) {
         return (path$$1, varName, minLength) => {
             return `if(${this.presenceCheckCondition(varName)} && ${varName}.length < ${minLength}) {
-        results.push({message: '${message(minLength)}', path: \`${path$$1}\`})
+        results.push({ path: \`${path$$1}\`, message: '${message(minLength)}' })
       }`;
         };
     }
     maxLengthChecker(message) {
         return (path$$1, varName, maxLength) => {
             return `if(${this.presenceCheckCondition(varName)} && ${varName}.length > ${maxLength}) {
-        results.push({message: '${message(maxLength)}', path: \`${path$$1}\`})
+        results.push({ path: \`${path$$1}\`, message: '${message(maxLength)}' })
       }`;
         };
     }
     basicTypeCheckerValidator(type) {
         return (path$$1, varName) => {
             return `if(${this.presenceCheckCondition(varName)} && typeof ${varName} !== '${type}') {
-        results.push({message: 'Should be a ${type}!', path: \`${path$$1}\`})
+        results.push({ path: \`${path$$1}\`, message: 'Should be a ${type}!' })
       }`;
         };
     }

@@ -61,7 +61,7 @@ export class ValidatorGenerator extends BaseGenerator<string> {
     if (discriminators && discriminators.length > 0) {
       discriminators.forEach(({ propertyName, value }) =>
         validators.push(
-          this.discriminatorValidator(`\${path}.${propertyName}`, accessor('input', propertyName), value, propertyName),
+          this.discriminatorValidator(`\${path}.${propertyName}`, accessor('input', propertyName), value),
         ),
       )
     }
@@ -102,7 +102,7 @@ export class ValidatorGenerator extends BaseGenerator<string> {
         ${entries(mapping)
           .map(([value, ref]) => this.oneOfDispatcher(value, ref))
           .join('\n')}
-        default: results.push({ message: \`Unexpected discriminator "\${(input as any).${propertyName}}"!\`, path: \`${defaultPath}\`})
+        default: results.push({ path: \`${defaultPath}\`, message: \`Unexpected discriminator "\${(input as any).${propertyName}}"!\` })
       }
     }`
   }
@@ -121,9 +121,9 @@ export class ValidatorGenerator extends BaseGenerator<string> {
     return validators.join('\n')
   }
 
-  discriminatorValidator(path: string, varName: string, value: string, prop: string): string {
+  discriminatorValidator(path: string, varName: string, value: string): string {
     return `if(${varName} !== '${value}') {
-      results.push({message: 'Should be "${value}"!', path: \`${path}\`})
+      results.push({path: \`${path}\`, message: 'Should be "${value}"!'})
     }`
   }
 
@@ -196,14 +196,14 @@ export class ValidatorGenerator extends BaseGenerator<string> {
 
   requiredPropertyValidator(path: string, varName: string) {
     return `if(${varName} === null || ${varName} === undefined) {
-      results.push({ message: 'Should not be empty!', path: \`${path}\`})
+      results.push({ path: \`${path}\`, message: 'Should not be empty!'})
     }`
   }
 
   minLengthChecker(message: (minLength: number) => string) {
     return (path: string, varName: string, minLength: number): string => {
       return `if(${this.presenceCheckCondition(varName)} && ${varName}.length < ${minLength}) {
-        results.push({message: '${message(minLength)}', path: \`${path}\`})
+        results.push({ path: \`${path}\`, message: '${message(minLength)}' })
       }`
     }
   }
@@ -211,7 +211,7 @@ export class ValidatorGenerator extends BaseGenerator<string> {
   maxLengthChecker(message: (minLength: number) => string) {
     return (path: string, varName: string, maxLength: number): string => {
       return `if(${this.presenceCheckCondition(varName)} && ${varName}.length > ${maxLength}) {
-        results.push({message: '${message(maxLength)}', path: \`${path}\`})
+        results.push({ path: \`${path}\`, message: '${message(maxLength)}' })
       }`
     }
   }
@@ -224,7 +224,7 @@ export class ValidatorGenerator extends BaseGenerator<string> {
   basicTypeCheckerValidator(type: string) {
     return (path: string, varName: string) => {
       return `if(${this.presenceCheckCondition(varName)} && typeof ${varName} !== '${type}') {
-        results.push({message: 'Should be a ${type}!', path: \`${path}\`})
+        results.push({ path: \`${path}\`, message: 'Should be a ${type}!' })
       }`
     }
   }
