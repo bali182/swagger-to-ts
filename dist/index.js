@@ -8,8 +8,10 @@ var keys = _interopDefault(require('lodash/keys'));
 var isNil = _interopDefault(require('lodash/isNil'));
 var entries = _interopDefault(require('lodash/entries'));
 var last = _interopDefault(require('lodash/last'));
-var prettier = _interopDefault(require('prettier'));
+var values = _interopDefault(require('lodash/values'));
+var isNumber = _interopDefault(require('lodash/isNumber'));
 var isVarName = _interopDefault(require('is-var-name'));
+var prettier = _interopDefault(require('prettier'));
 var pascalCase = _interopDefault(require('pascalcase'));
 var endsWith = _interopDefault(require('lodash/endsWith'));
 var startsWith = _interopDefault(require('lodash/startsWith'));
@@ -17,6 +19,18 @@ var fs = require('fs');
 var path = require('path');
 var flatMap = _interopDefault(require('lodash/flatMap'));
 
+var PrimitiveType;
+(function (PrimitiveType) {
+    PrimitiveType["string"] = "string";
+    PrimitiveType["number"] = "number";
+    PrimitiveType["boolean"] = "boolean";
+    PrimitiveType["integer"] = "integer";
+    PrimitiveType["int"] = "int";
+    PrimitiveType["float"] = "float";
+    PrimitiveType["double"] = "double";
+    PrimitiveType["null"] = "null";
+    PrimitiveType["any"] = "any";
+})(PrimitiveType || (PrimitiveType = {}));
 function unique(items) {
     const set = new Set(items);
     return Array.from(set);
@@ -41,13 +55,7 @@ function isArrayType(input) {
     return input.type === 'array' || Boolean(input.items);
 }
 function isSimpleType(input) {
-    return (input instanceof Object &&
-        (input.type === 'string' ||
-            input.type === 'number' ||
-            input.type === 'boolean' ||
-            input.type === 'integer' ||
-            input.type === 'null' ||
-            input.type === 'any'));
+    return input instanceof Object && values(PrimitiveType).indexOf(input.type) >= 0;
 }
 function isOneOfType(input) {
     return Boolean(input.oneOf);
@@ -111,6 +119,23 @@ function getDiscriminators(inputSchema, registry) {
 }
 function getRefName(ref) {
     return last(ref.split('/'));
+}
+var AccessorType;
+(function (AccessorType) {
+    AccessorType["PROPERTY"] = "PROPERTY";
+    AccessorType["INDEX"] = "INDEX";
+    AccessorType["INDEX_PROPERTY"] = "INDEX_PROPERTY";
+})(AccessorType || (AccessorType = {}));
+function accessor(root, element, hint = null) {
+    if (isNumber(element) || hint === AccessorType.INDEX) {
+        return `${root}[${element}]`;
+    }
+    else if (!isVarName(element) || hint === AccessorType.INDEX_PROPERTY) {
+        return `${root}['${element}']`;
+    }
+    else {
+        return `${root}.${element}`;
+    }
 }
 
 class OperationWrapper {
@@ -234,13 +259,17 @@ class OperationWrapper {
 }
 
 class TypeRegistry {
-    constructor(spec, nameProvider) {
+    constructor(args, spec, nameProvider) {
         this.types = [];
         this.operations = [];
         this.spec = spec;
+        this.args = args;
         this.nameProvider = nameProvider;
         this.registerOperations();
         this.registerTypes();
+    }
+    getArgs() {
+        return this.args;
     }
     getNameProvider() {
         return this.nameProvider;
@@ -282,6 +311,9 @@ class TypeRegistry {
             throw new TypeError(`Type for schema "${JSON.stringify(schema, null, 2)}" is not registered!`);
         }
         return wrapper.name;
+    }
+    resolveRef(ref) {
+        return this.getSchemaByName(last(ref.$ref.split('/')));
     }
     registerType(name, schema) {
         const byName = this.types.find(({ name: n }) => n === name);
@@ -424,7 +456,7 @@ class TypeRefGenerator extends BaseGenerator {
     generateRefType(ref) {
         const name = pascalCase(last(ref.$ref.split('/')));
         this.registry.getSchemaByName(name);
-        return name;
+        return this.registry.getNameProvider().addTypeNamespace(name);
     }
     generateMapType(schema) {
         if (typeof schema === 'boolean') {
@@ -459,7 +491,7 @@ class TypeRefGenerator extends BaseGenerator {
         }
     }
     generateRegisteredType(schema) {
-        return this.registry.getNameBySchema(schema);
+        return this.registry.getNameProvider().addTypeNamespace(this.registry.getNameBySchema(schema));
     }
     generateAnonymusObjectType(schema) {
         const fields = entries(schema.properties).map(([name, propSchema]) => {
@@ -601,7 +633,8 @@ class OperationSignatureGenerator extends BaseGenerator {
     }
     generateParamsParameter(op) {
         if (op.operation.parameters && op.operation.parameters.length > 0) {
-            const type = this.registry.getNameProvider().getParametersTypeName(op.getId());
+            const np = this.registry.getNameProvider();
+            const type = np.addTypeNamespace(np.getParametersTypeName(op.getId()));
             return `params: ${type}`;
         }
         return null;
@@ -881,7 +914,7 @@ class ApiGenerator extends BaseGenerator {
             .getOperationIds()
             .map((id) => opGenerator.generate(id))
             .join('\n');
-        return `export class ${np.getApiImplName()} implements ${np.getApiTypeName()} {
+        return `export class ${np.getApiImplName()} implements ${np.addApiContractNamespace(np.getApiTypeName())} {
       private readonly adapter: __HttpAdapter 
       constructor(adapter: __HttpAdapter) {
         this.adapter = adapter
@@ -933,10 +966,29 @@ class ParameterTypesGenerator extends BaseGenerator {
     }
 }
 
-const content = fs.readFileSync(path.join(__dirname, '../', 'StaticTypes.ts'), 'utf-8');
+var GeneratorIds;
+(function (GeneratorIds) {
+    GeneratorIds["Types"] = "types";
+    GeneratorIds["TypeGuards"] = "typeguards";
+    GeneratorIds["ApiContract"] = "api-contract";
+    GeneratorIds["Api"] = "api";
+    GeneratorIds["Validators"] = "validators";
+})(GeneratorIds || (GeneratorIds = {}));
+
+const apiTypes = fs.readFileSync(path.join(__dirname, '../', 'ApiStaticTypes.ts'), 'utf-8');
+const validatorTypes = fs.readFileSync(path.join(__dirname, '../', 'ValidatorStaticTypes.ts'), 'utf-8');
 class StaticTypesGenerator {
+    constructor(id) {
+        this.id = id;
+    }
     generate() {
-        return content.trim();
+        switch (this.id) {
+            case GeneratorIds.Api:
+                return apiTypes.trim();
+            case GeneratorIds.Validators:
+                return validatorTypes.trim();
+        }
+        return '';
     }
 }
 
@@ -968,7 +1020,7 @@ class TypeGuardsGenerator extends BaseGenerator {
     generateTypeGuard(baseTypeName, checkedTypeName, propertyName, propertyValue) {
         const np = this.registry.getNameProvider();
         const tgName = np.getTypeGuardName(checkedTypeName);
-        return `export function ${tgName}(input: ${baseTypeName}): input is ${checkedTypeName} {
+        return `export function ${tgName}(input: ${np.addTypeNamespace(baseTypeName)}): input is ${np.addTypeNamespace(checkedTypeName)} {
       return input && input.${propertyName} === '${propertyValue}'
     }`;
     }
@@ -981,17 +1033,277 @@ class TypeGuardsGenerator extends BaseGenerator {
     }
 }
 
+class ValidatorGenerator extends BaseGenerator {
+    constructor(registry) {
+        super(registry);
+        this.stringMinLengthChecker = this.minLengthChecker((l) => `Should be at least ${l} charater(s)!`);
+        this.arrayMinLengthChecker = this.minLengthChecker((l) => `Should have at least ${l} element(s)!`);
+        this.stringMaxLengthChecker = this.maxLengthChecker((l) => `Should not be longer than ${l} charater(s)!`);
+        this.arrayMaxLengthChecker = this.maxLengthChecker((l) => `Should not have more than ${l} element(s)!`);
+        this.stringPropertyValidator = this.basicTypeCheckerValidator('string');
+        this.boolPropertyValidator = this.basicTypeCheckerValidator('boolean');
+        this.numberPropertyValidator = this.basicTypeCheckerValidator('number');
+    }
+    generate(name) {
+        const np = this.registry.getNameProvider();
+        const fnName = np.getValidatorName(name);
+        const typeName = np.getTypeName(name);
+        return `export function ${fnName}(input: ${np.addTypeNamespace(typeName)}, path: string = '$'): __ValidationResult[] {
+      const results: __ValidationResult[] = []
+      ${this.schemaValidators(this.registry.getSchemaByName(name))}
+      return results
+    }`;
+    }
+    schemaValidators(schema) {
+        if (isOneOfType(schema)) {
+            if (schema.discriminator) {
+                return this.oneOfValidator(schema);
+            }
+            if (schema.oneOf.length === 1) {
+                const oneOf = schema.oneOf[0];
+                const name = isRefType(oneOf) ? getRefName(oneOf.$ref) : this.registry.getNameBySchema(oneOf);
+                const validatorName = this.registry.getNameProvider().getValidatorName(name);
+                return `if(!(input instanceof Object)) {
+          results.push({ message: '${name} should be an object', path })
+        }
+        results.push(...${validatorName}(input, path))`;
+            }
+        }
+        else if (isObjectType(schema)) {
+            return this.objectValidator(schema);
+        }
+        else if (isEnumType(schema)) {
+            return this.enumValidator(schema);
+        }
+        return '';
+    }
+    objectValidator(schema) {
+        const name = this.registry.getNameBySchema(schema);
+        const objectCheck = `if(!(input instanceof Object)) {
+      results.push({ message: '${name} should be an object', path })
+    }`;
+        const props = entries(schema.properties || {})
+            .filter(([name]) => name !== 'traversableAgain' && name !== 'empty') // TODO scala collection bullshit
+            .map(([name, propSchema]) => this.propertyValidator(name, propSchema, schema.required && schema.required.indexOf(name) >= 0))
+            .filter((str) => str !== null && str.length > 0);
+        return [objectCheck].concat(props).join('\n');
+    }
+    enumValidator(schema) {
+        const name = this.registry.getNameBySchema(schema);
+        const stringCheck = `if (typeof input !== 'string') {
+      results.push({ message: '${name} should represented as a string', path })
+    }`;
+        const values$$1 = `${schema.enum.map((v) => `"${v}"`).join(', ')}`;
+        const enumValueCheck = `if([${values$$1}].indexOf(input) < 0) {
+      results.push({ message: '${name} should be one of ${values$$1}', path})
+    }`;
+        return [stringCheck, enumValueCheck].join('\n');
+    }
+    oneOfValidator(schema) {
+        const name = this.registry.getNameBySchema(schema);
+        const { mapping, propertyName } = schema.discriminator;
+        return `if(!(input instanceof Object)) {
+      results.push({ message: '${name} should be an object', path })
+    }
+    switch(input.${propertyName}) {
+      ${entries(mapping)
+            .map(([value, ref]) => this.oneOfDispatcher(value, ref))
+            .join('\n')}
+    }`;
+    }
+    oneOfDispatcher(value, ref) {
+        const validatorName = this.registry.getNameProvider().getValidatorName(getRefName(ref));
+        return `case '${value}': return ${validatorName}(input, path)`;
+    }
+    propertyValidator(prop, propSchema, required) {
+        const validators = [];
+        const path$$1 = `\${path}.${prop}`;
+        if (required) {
+            validators.push(this.requiredPropertyValidator(prop, path$$1, 'input'));
+        }
+        const schema = isRefType(propSchema) ? this.registry.resolveRef(propSchema) : propSchema;
+        return this.propValidator(path$$1, accessor('input', prop), schema);
+    }
+    propValidator(path$$1, varName, schema) {
+        const validators = [];
+        if (schema) {
+            if (isSimpleType(schema)) {
+                switch (schema.type) {
+                    case PrimitiveType.string: {
+                        validators.push(this.stringPropertyValidator(path$$1, varName));
+                        if (!isNil(schema.minLength)) {
+                            validators.push(this.stringMinLengthChecker(path$$1, varName, schema.minLength));
+                        }
+                        if (!isNil(schema.maxLength)) {
+                            validators.push(this.stringMaxLengthChecker(path$$1, varName, schema.maxLength));
+                        }
+                        break;
+                    }
+                    case PrimitiveType.boolean: {
+                        validators.push(this.boolPropertyValidator(path$$1, varName));
+                        break;
+                    }
+                    case PrimitiveType.number:
+                    case PrimitiveType.int:
+                    case PrimitiveType.integer:
+                    case PrimitiveType.double:
+                    case PrimitiveType.float: {
+                        validators.push(this.numberPropertyValidator(path$$1, varName));
+                        break;
+                    }
+                }
+            }
+            else if (isObjectType(schema)) {
+                validators.push(this.referenceValidator(path$$1, varName, schema));
+            }
+            else if (isArrayType(schema)) {
+                validators.push(this.arrayValidator(path$$1, varName, schema));
+                if (!isNil(schema.minLength)) {
+                    validators.push(this.arrayMinLengthChecker(path$$1, varName, schema.minLength));
+                }
+                if (!isNil(schema.maxLength)) {
+                    validators.push(this.arrayMaxLengthChecker(path$$1, varName, schema.maxLength));
+                }
+            }
+        }
+        return validators.join('\n');
+    }
+    arrayValidator(basePath, varName, schema) {
+        if (!schema.items) {
+            return null;
+        }
+        const itemsSchema = isRefType(schema.items) ? this.registry.resolveRef(schema.items) : schema.items;
+        return `if(${this.presenceCheckCondition(varName)}) {
+      for (let i=0; i<${varName}.length; i+=1 ) {
+        const __item = ${varName}[i]
+        ${this.propValidator(`${basePath}[\${i}]`, '__item', itemsSchema)}
+      }
+    }`;
+    }
+    referenceValidator(path$$1, varName, schema) {
+        if (!this.registry.hasSchema(schema)) {
+            return null;
+        }
+        const np = this.registry.getNameProvider();
+        const name = this.registry.getNameBySchema(schema);
+        return `if(${this.presenceCheckCondition(varName)}) {
+      results.push(...${np.getValidatorName(name)}(${varName}, \`${path$$1}\`))
+    }`;
+    }
+    requiredPropertyValidator(prop, path$$1, varName) {
+        return `if(${varName}.${prop} === null || ${varName}.${prop} === undefined) {
+      results.push({ message: '${prop} is required!', path: \`${path$$1}\`})
+    }`;
+    }
+    minLengthChecker(message) {
+        return (path$$1, varName, minLength) => {
+            return `if(${this.presenceCheckCondition(varName)} && ${varName}.length < ${minLength}) {
+        results.push({message: '${message(minLength)}', path: \`${path$$1}\`})
+      }`;
+        };
+    }
+    maxLengthChecker(message) {
+        return (path$$1, varName, maxLength) => {
+            return `if(${this.presenceCheckCondition(varName)} && ${varName}.length > ${maxLength}) {
+        results.push({message: '${message(maxLength)}', path: \`${path$$1}\`})
+      }`;
+        };
+    }
+    minChecker(path$$1, varName, min) { }
+    basicTypeCheckerValidator(type) {
+        return (path$$1, varName) => {
+            return `if(${this.presenceCheckCondition(varName)} && typeof ${varName} !== '${type}') {
+        results.push({message: 'Should be a ${type}!', path: \`${path$$1}\`})
+      }`;
+        };
+    }
+    presenceCheckCondition(varName) {
+        return `${varName} !== null && ${varName} !== undefined`;
+    }
+}
+
+class ValidatorsGenerator extends BaseGenerator {
+    generate() {
+        const generator = new ValidatorGenerator(this.registry);
+        return this.registry
+            .getTypes()
+            .map((type) => generator.generate(type.name))
+            .join('\n');
+    }
+}
+
+class ImportsGenerator extends BaseGenerator {
+    generate() {
+        const { registry } = this;
+        const { apiContractPath, typesPath, targets } = registry.getArgs();
+        const np = registry.getNameProvider();
+        const imports = [];
+        if (apiContractPath && targets.indexOf(GeneratorIds.ApiContract) < 0) {
+            imports.push(`import * as ${np.getApiContractImport()} from '${apiContractPath}'`);
+        }
+        if (typesPath && targets.indexOf(GeneratorIds.Types) < 0) {
+            imports.push(`import * as ${np.getTypesImport()} from '${typesPath}'`);
+        }
+        if (imports.length > 0) {
+            imports.push('');
+        }
+        return imports.join('\n');
+    }
+}
+
 class RootGenerator extends BaseGenerator {
     generate() {
-        const generators = [
-            new TypesGenerator(this.registry),
-            new ParameterTypesGenerator(this.registry),
-            new TypeGuardsGenerator(this.registry),
-            new StaticTypesGenerator(),
-            new ApiTypeGenerator(this.registry),
+        const { targets } = this.registry.getArgs();
+        const results = [];
+        if (targets.indexOf(GeneratorIds.Types) >= 0) {
+            results.push(this.generateTypes());
+        }
+        if (targets.indexOf(GeneratorIds.ApiContract) >= 0) {
+            results.push(this.generateApiContract());
+        }
+        if (targets.indexOf(GeneratorIds.TypeGuards) >= 0) {
+            results.push(this.generateTypeGuards());
+        }
+        if (targets.indexOf(GeneratorIds.Api) >= 0) {
+            results.push(this.generateApi());
+        }
+        if (targets.indexOf(GeneratorIds.Validators) >= 0) {
+            results.push(this.generateValidators());
+        }
+        return this.format(results.join('\n'));
+    }
+    generateTypes() {
+        return [new TypesGenerator(this.registry), new ParameterTypesGenerator(this.registry)]
+            .map((generator) => generator.generate())
+            .join('\n');
+    }
+    generateApiContract() {
+        return [new ImportsGenerator(this.registry), new ApiTypeGenerator(this.registry)]
+            .map((generator) => generator.generate())
+            .join('\n');
+    }
+    generateTypeGuards() {
+        return [new ImportsGenerator(this.registry), new TypeGuardsGenerator(this.registry)]
+            .map((generator) => generator.generate())
+            .join('\n');
+    }
+    generateApi() {
+        return [
+            new ImportsGenerator(this.registry),
+            new StaticTypesGenerator(GeneratorIds.Api),
             new ApiGenerator(this.registry),
-        ];
-        return this.format(generators.map((g) => g.generate()).join('\n'));
+        ]
+            .map((generator) => generator.generate())
+            .join('\n');
+    }
+    generateValidators() {
+        return [
+            new ImportsGenerator(this.registry),
+            new StaticTypesGenerator(GeneratorIds.Validators),
+            new ValidatorsGenerator(this.registry),
+        ]
+            .map((generator) => generator.generate())
+            .join('\n');
     }
 }
 

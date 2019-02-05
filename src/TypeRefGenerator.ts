@@ -66,7 +66,7 @@ export class TypeRefGenerator extends BaseGenerator<SchemaOrRef> {
   generateRefType(ref: ReferenceObject): string {
     const name = pascalCase(last(ref.$ref.split('/')))
     this.registry.getSchemaByName(name)
-    return name
+    return this.registry.getNameProvider().addTypeNamespace(name)
   }
 
   generateMapType(schema: boolean | SchemaOrRef): string {
@@ -106,7 +106,7 @@ export class TypeRefGenerator extends BaseGenerator<SchemaOrRef> {
   }
 
   generateRegisteredType(schema: SchemaObject): string {
-    return this.registry.getNameBySchema(schema)
+    return this.registry.getNameProvider().addTypeNamespace(this.registry.getNameBySchema(schema))
   }
 
   generateAnonymusObjectType(schema: SchemaObject): string {

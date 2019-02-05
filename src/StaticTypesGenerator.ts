@@ -1,11 +1,19 @@
-import { IGenerator } from './typings'
+import { IGenerator, GeneratorIds } from './typings'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
-const content = readFileSync(join(__dirname, '../', 'StaticTypes.ts'), 'utf-8')
+const apiTypes = readFileSync(join(__dirname, '../', 'ApiStaticTypes.ts'), 'utf-8')
+const validatorTypes = readFileSync(join(__dirname, '../', 'ValidatorStaticTypes.ts'), 'utf-8')
 
 export class StaticTypesGenerator implements IGenerator<void> {
+  constructor(private readonly id: GeneratorIds) {}
   generate() {
-    return content.trim()
+    switch (this.id) {
+      case GeneratorIds.Api:
+        return apiTypes.trim()
+      case GeneratorIds.Validators:
+        return validatorTypes.trim()
+    }
+    return ''
   }
 }

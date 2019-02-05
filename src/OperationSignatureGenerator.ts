@@ -26,7 +26,8 @@ export class OperationSignatureGenerator extends BaseGenerator<string> {
 
   generateParamsParameter(op: OperationWrapper): string {
     if (op.operation.parameters && op.operation.parameters.length > 0) {
-      const type = this.registry.getNameProvider().getParametersTypeName(op.getId())
+      const np = this.registry.getNameProvider()
+      const type = np.addTypeNamespace(np.getParametersTypeName(op.getId()))
       return `params: ${type}`
     }
     return null

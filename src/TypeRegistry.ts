@@ -1,4 +1,4 @@
-import { SchemaObject, OpenApiSpec, OperationObject, PathItemObject } from '@loopback/openapi-v3-types'
+import { SchemaObject, OpenApiSpec, OperationObject, PathItemObject, ReferenceObject } from '@loopback/openapi-v3-types'
 import entries from 'lodash/entries'
 import {
   isObjectType,
@@ -13,17 +13,25 @@ import {
 import { TypeWrapper } from './TypeWrapper'
 import { HTTPMethod, OperationWrapper } from './OperationWrapper'
 import { NameProvider } from './NameProvider'
+import last from 'lodash/last'
+import { Args } from './typings'
 
 export class TypeRegistry {
   private readonly types: TypeWrapper[] = []
   private readonly operations: OperationWrapper[] = []
   private readonly spec: OpenApiSpec
   private readonly nameProvider: NameProvider
-  constructor(spec: OpenApiSpec, nameProvider: NameProvider) {
+  private readonly args: Args
+
+  constructor(args: Args, spec: OpenApiSpec, nameProvider: NameProvider) {
     this.spec = spec
+    this.args = args
     this.nameProvider = nameProvider
     this.registerOperations()
     this.registerTypes()
+  }
+  getArgs(): Args {
+    return this.args
   }
   getNameProvider(): NameProvider {
     return this.nameProvider
@@ -65,6 +73,9 @@ export class TypeRegistry {
       throw new TypeError(`Type for schema "${JSON.stringify(schema, null, 2)}" is not registered!`)
     }
     return wrapper.name
+  }
+  resolveRef(ref: ReferenceObject): SchemaObject {
+    return this.getSchemaByName(last(ref.$ref.split('/')))
   }
   protected registerType(name: string, schema: SchemaObject): void {
     const byName = this.types.find(({ name: n }) => n === name)

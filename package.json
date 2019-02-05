@@ -15,7 +15,12 @@
     "build": "npm run build-main && npm run build-cli",
     "test": "mocha -r ts-node/register test/*.spec.ts",
     "tslint": "tslint -c tslint.json 'src/**/*.ts'",
-    "on-sample": "npm run build && node dist/cli.js -f schema.json -n FlowWriterApi > output.ts"
+    "gen-types": "node dist/cli.js -f schema.json -n FlowWriterApi -t types > output/Types.ts",
+    "gen-api-contract": "node dist/cli.js -f schema.json -n FlowWriterApi -t api-contract --typesPath ./Types > output/ApiContract.ts",
+    "gen-api": "node dist/cli.js -f schema.json -n FlowWriterApi -t api --typesPath ./Types --apiContractPath ./ApiContract > output/Api.ts",
+    "gen-guards": "node dist/cli.js -f schema.json -n FlowWriterApi -t typeguards --typesPath ./Types > output/TypeGuards.ts",
+    "gen-validators": "node dist/cli.js -f schema.json -n FlowWriterApi -t validators --typesPath ./Types > output/Validators.ts",
+    "on-sample": "npm run build && npm run gen-types && npm run gen-api-contract && npm run gen-guards && npm run gen-api && npm run gen-validators"
   },
   "repository": {
     "type": "git",

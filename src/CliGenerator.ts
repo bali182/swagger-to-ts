@@ -1,4 +1,3 @@
-import { ArgumentParser } from 'argparse'
 import { readFileSync } from 'fs'
 import { resolve, extname } from 'path'
 import { OpenApiSpec } from '@loopback/openapi-v3-types'
@@ -6,31 +5,11 @@ import { TypeRegistry } from './TypeRegistry'
 import { RootGenerator } from './RootGenerator'
 import YAML from 'yamljs'
 import { NameProvider } from './NameProvider'
-
-type Args = {
-  file: string
-  apiTypeName: string
-}
-
-const parser = new ArgumentParser({
-  description: 'OpenAPI 3.0 -> TypeScript generator',
-})
-
-parser.addArgument(['--file', '-f'], {
-  required: true,
-  dest: 'file',
-  help: 'Path to the .json file to be consumed.',
-})
-
-parser.addArgument(['--name', '-n'], {
-  required: false,
-  dest: 'apiTypeName',
-  help: 'Name of the generated type.',
-  defaultValue: 'Api',
-})
+import { Args } from './typings'
+import { cliParser } from './cliParser'
 
 export class CliGenerator {
-  private readonly args: Args = parser.parseArgs()
+  private readonly args: Args = cliParser.parseArgs()
 
   readSchema(): OpenApiSpec {
     const file = resolve(this.args.file)
@@ -54,7 +33,7 @@ export class CliGenerator {
 
   execute(): void {
     const schema = this.readSchema()
-    const registry = new TypeRegistry(schema, new NameProvider(this.args.apiTypeName))
+    const registry = new TypeRegistry(this.args, schema, new NameProvider(this.args))
     const generator = new RootGenerator(registry)
     const source = generator.generate()
     this.writeOutput(source)

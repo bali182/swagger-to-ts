@@ -1,10 +1,21 @@
 import pascalCase from 'pascalcase'
 import camelCase from 'camel-case'
+import { Args, GeneratorIds } from './typings'
 
 export class NameProvider {
-  private readonly apiTypeName: string
-  constructor(apiTypeName: string) {
-    this.apiTypeName = apiTypeName
+  private readonly args: Args
+  constructor(args: Args) {
+    this.args = args
+  }
+  addTypeNamespace(input: string) {
+    return this.args.typesPath && this.args.targets.indexOf(GeneratorIds.Types) < 0
+      ? `${this.getTypesImport()}.${input}`
+      : input
+  }
+  addApiContractNamespace(input: string) {
+    return this.args.apiContractPath && this.args.targets.indexOf(GeneratorIds.ApiContract) < 0
+      ? `${this.getApiContractImport()}.${input}`
+      : input
   }
   getEnumConstantName(name: string): string {
     return pascalCase(name)
@@ -40,7 +51,7 @@ export class NameProvider {
     return `${pascalCase(operationName)}${pascalCase(method)}Response`
   }
   getApiTypeName(): string {
-    return this.apiTypeName
+    return this.args.apiTypeName
   }
   getApiImplName(): string {
     return `${this.getApiTypeName()}Impl`
@@ -50,5 +61,14 @@ export class NameProvider {
   }
   getTypeGuardName(typeName: string) {
     return `is${pascalCase(typeName)}`
+  }
+  getValidatorName(typeName: string) {
+    return `validate${pascalCase(typeName)}`
+  }
+  getTypesImport(): string {
+    return '__T'
+  }
+  getApiContractImport(): string {
+    return '__A'
   }
 }

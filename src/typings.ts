@@ -7,3 +7,22 @@ export interface IGenerator<Input> {
 export type SchemaOrRef = SchemaObject | ReferenceObject
 export type RefOrParameter = ReferenceObject | ParameterObject
 export type PropertyMap = { [propertyName: string]: SchemaOrRef }
+
+export enum GeneratorIds {
+  Types = 'types',
+  TypeGuards = 'typeguards',
+  ApiContract = 'api-contract',
+  Api = 'api',
+  Validators = 'validators',
+}
+
+export type Args = {
+  file: string
+  apiTypeName: string
+  targets: GeneratorIds[]
+  typesPath?: string
+  typeGuardsPath?: string
+  apiContractPath?: string
+  apiPath?: string
+  validatorsPath?: string
+}

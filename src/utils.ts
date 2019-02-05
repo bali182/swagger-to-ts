@@ -9,7 +9,23 @@ import keys from 'lodash/keys'
 import isNil from 'lodash/isNil'
 import entries from 'lodash/entries'
 import last from 'lodash/last'
+import values from 'lodash/values'
+import isNumber from 'lodash/isNumber'
+import isVarName from 'is-var-name'
+
 import { TypeRegistry } from './TypeRegistry'
+
+export enum PrimitiveType {
+  string = 'string',
+  number = 'number',
+  boolean = 'boolean',
+  integer = 'integer',
+  int = 'int',
+  float = 'float',
+  double = 'double',
+  null = 'null',
+  any = 'any',
+}
 
 export function unique<T>(items: T[]): T[] {
   const set = new Set(items)
@@ -40,15 +56,7 @@ export function isArrayType(input: SchemaObject): boolean {
   return input.type === 'array' || Boolean(input.items)
 }
 export function isSimpleType(input: SchemaObject): boolean {
-  return (
-    input instanceof Object &&
-    (input.type === 'string' ||
-      input.type === 'number' ||
-      input.type === 'boolean' ||
-      input.type === 'integer' ||
-      input.type === 'null' ||
-      input.type === 'any')
-  )
+  return input instanceof Object && values(PrimitiveType).indexOf(input.type) >= 0
 }
 export function isOneOfType(input: any): boolean {
   return Boolean(input.oneOf)
@@ -122,4 +130,20 @@ export function getDiscriminators(inputSchema: SchemaObject, registry: TypeRegis
 }
 export function getRefName(ref: string): string {
   return last(ref.split('/'))
+}
+
+export enum AccessorType {
+  PROPERTY = 'PROPERTY',
+  INDEX = 'INDEX',
+  INDEX_PROPERTY = 'INDEX_PROPERTY',
+}
+
+export function accessor(root: string, element: string, hint: AccessorType = null) {
+  if (isNumber(element) || hint === AccessorType.INDEX) {
+    return `${root}[${element}]`
+  } else if (!isVarName(element) || hint === AccessorType.INDEX_PROPERTY) {
+    return `${root}['${element}']`
+  } else {
+    return `${root}.${element}`
+  }
 }
