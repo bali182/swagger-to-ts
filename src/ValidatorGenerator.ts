@@ -175,7 +175,10 @@ export class ValidatorGenerator extends BaseGenerator<string> {
       return null
     }
     const itemsSchema = isRefType(schema.items) ? this.registry.resolveRef(schema.items) : schema.items
-    return `if(${this.presenceCheckCondition(varName)}) {
+    return `if(${this.presenceCheckCondition(varName)} && !Array.isArray(${varName})) {
+      results.push({ path: \`${basePath}\`, message: 'Should be an array!' })
+    }
+    if(Array.isArray(${varName})) {
       for (let i=0; i<${varName}.length; i+=1 ) {
         const item = ${varName}[i]
         ${this.propValidator(`${basePath}[\${i}]`, 'item', itemsSchema)}
