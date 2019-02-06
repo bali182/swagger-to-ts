@@ -1059,7 +1059,7 @@ class ValidatorGenerator extends BaseGenerator {
     schemaValidators(schema) {
         if (isOneOfType(schema)) {
             if (schema.discriminator) {
-                return this.oneOfValidator('input', schema);
+                return this.oneOfValidator('${path}', schema);
             }
             if (schema.oneOf.length === 1) {
                 const oneOf = schema.oneOf[0];
@@ -1111,7 +1111,7 @@ class ValidatorGenerator extends BaseGenerator {
     }
     oneOfValidator(path$$1, schema) {
         const { mapping, propertyName } = schema.discriminator;
-        const defaultPath = `${path$$1}.${propertyName}`;
+        const discPath = `${path$$1}.${propertyName}`;
         return `if(input === null || input === undefined || !(input instanceof Object)) {
       results.push({ path, message: 'Should be an object!' })
     } else {
@@ -1119,7 +1119,7 @@ class ValidatorGenerator extends BaseGenerator {
         ${entries(mapping)
             .map(([value, ref]) => this.oneOfDispatcher(value, ref))
             .join('\n')}
-        default: results.push({ path: \`${defaultPath}\`, message: \`Unexpected discriminator "\${(input as any).${propertyName}}"!\` })
+        default: results.push({ path: \`${discPath}\`, message: \`Unexpected discriminator "\${(input as any).${propertyName}}"!\` })
       }
     }`;
     }
