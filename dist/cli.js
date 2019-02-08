@@ -43,11 +43,14 @@ function isObjectType(input) {
     }
     return input.type === 'object' || (isNil(input.type) && Boolean(input.properties));
 }
+function isMapType(input) {
+    return input instanceof Object && input.type === 'object' && Boolean(input.additionalProperties);
+}
 function isPureMapType(input) {
     return (input instanceof Object &&
         input.type === 'object' &&
         (!Boolean(input.properties) || keys(input.properties).length === 0) &&
-        input.additionalProperties !== false);
+        typeof input.additionalProperties === 'object');
 }
 function isEnumType(input) {
     // We only handle string enums
@@ -1077,7 +1080,16 @@ class ValidatorGenerator extends BaseGenerator {
         else if (isEnumType(schema)) {
             return this.enumValidator(schema);
         }
+        else if (isArrayType(schema)) {
+            return this.arrayValidator(schema);
+        }
         return '';
+    }
+    arrayValidator(schema) {
+        return `if(input === null || input === undefined || !Array.isArray(input)) {
+      results.push({ path, message: 'Should be an array!' })
+    }
+    ${this.arrayPropValidator('path', 'input', schema)}`;
     }
     objectValidator(schema) {
         const validators = [];
@@ -1085,11 +1097,16 @@ class ValidatorGenerator extends BaseGenerator {
         if (discriminators && discriminators.length > 0) {
             discriminators.forEach(({ propertyName, value }) => validators.push(this.discriminatorValidator(`\${path}.${propertyName}`, accessor('input', propertyName), value)));
         }
-        entries(schema.properties || {})
-            .filter(([name]) => name !== 'traversableAgain' && name !== 'empty') // TODO scala collection bullshit
-            .map(([name, propSchema]) => this.propertyValidator(name, propSchema, schema.required && schema.required.indexOf(name) >= 0))
-            .filter((str) => str !== null && str.length > 0)
-            .forEach((v) => validators.push(v));
+        if (isMapType(schema)) {
+            validators.push(this.additionalPropsValidator('path', 'input', schema));
+        }
+        else {
+            entries(schema.properties || {})
+                .filter(([name]) => name !== 'traversableAgain' && name !== 'empty') // TODO scala collection bullshit
+                .map(([name, propSchema]) => this.propertyValidator(name, propSchema, schema.required && schema.required.indexOf(name) >= 0))
+                .filter((str) => str !== null && str.length > 0)
+                .forEach((v) => validators.push(v));
+        }
         return `if(input === null || input === undefined || !(input instanceof Object)) {
       results.push({ path, message: 'Should be an object!' })
     } else {
@@ -1175,7 +1192,8 @@ class ValidatorGenerator extends BaseGenerator {
                 }
             }
             else if (isArrayType(schema)) {
-                validators.push(this.arrayValidator(path$$1, varName, schema));
+                validators.push(this.arrayPropTypeValidator(path$$1, varName));
+                validators.push(this.arrayPropValidator(path$$1, varName, schema));
                 if (!isNil(schema.minLength)) {
                     validators.push(this.arrayMinLengthChecker(path$$1, varName, schema.minLength));
                 }
@@ -1186,20 +1204,39 @@ class ValidatorGenerator extends BaseGenerator {
         }
         return validators.join('\n');
     }
-    arrayValidator(basePath, varName, schema) {
+    arrayPropTypeValidator(path$$1, varName) {
+        return `if(${this.presenceCheckCondition(varName)} && !Array.isArray(${varName})) {
+      results.push({ path: \`${path$$1}\`, message: 'Should be an array!' })
+    }`;
+    }
+    arrayPropValidator(path$$1, varName, schema) {
         if (!schema.items) {
             return null;
         }
         const itemsSchema = isRefType(schema.items) ? this.registry.resolveRef(schema.items) : schema.items;
-        return `if(${this.presenceCheckCondition(varName)} && !Array.isArray(${varName})) {
-      results.push({ path: \`${basePath}\`, message: 'Should be an array!' })
-    }
-    if(Array.isArray(${varName})) {
-      for (let i=0; i<${varName}.length; i+=1 ) {
+        return `if(Array.isArray(${varName})) {
+      for (let i=0; i<${varName}.length; i+=1) {
         const item = ${varName}[i]
-        ${this.propValidator(`${basePath}[\${i}]`, 'item', itemsSchema)}
+        ${this.propValidator(`${path$$1}[\${i}]`, 'item', itemsSchema)}
       }
     }`;
+    }
+    additionalPropsValidator(path$$1, varName, schema) {
+        const additionalProps = schema.additionalProperties;
+        if (typeof additionalProps === 'boolean') {
+            return '';
+        }
+        const propSchema = isRefType(additionalProps) ? this.registry.resolveRef(additionalProps) : additionalProps;
+        const validator = this.propValidator(`\${path}["\${key}"]`, 'value', propSchema);
+        if (validator) {
+            return `const keys = Object.keys(${varName})
+        for(let i=0; i<keys.length; i+=1) {
+          const key = keys[i]
+          const value = ${varName}[key]
+          ${validator}
+        }`;
+        }
+        return null;
     }
     referenceValidator(path$$1, varName, schema) {
         if (!this.registry.hasSchema(schema)) {

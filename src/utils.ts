@@ -45,7 +45,7 @@ export function isPureMapType(input: SchemaObject): boolean {
     input instanceof Object &&
     input.type === 'object' &&
     (!Boolean(input.properties) || keys(input.properties).length === 0) &&
-    input.additionalProperties !== false
+    typeof input.additionalProperties === 'object'
   )
 }
 export function isEnumType(input: SchemaObject): boolean {
