@@ -44,10 +44,7 @@ export class ValidatorGenerator extends BaseGenerator<string> {
         const oneOf = schema.oneOf[0]
         const name = isRefType(oneOf) ? getRefName(oneOf.$ref) : this.registry.getNameBySchema(oneOf)
         const validatorName = this.registry.getNameProvider().getValidatorName(name)
-        return `if(!(input instanceof Object)) {
-          results.push({ path, message: 'Should be an object!' })
-        }
-        results.push(...${validatorName}(input, path))`
+        return `results.push(...${validatorName}(input, path))`
       }
     } else if (isObjectType(schema)) {
       return this.objectValidator(schema)
@@ -196,10 +193,13 @@ export class ValidatorGenerator extends BaseGenerator<string> {
       return null
     }
     const itemsSchema = isRefType(schema.items) ? this.registry.resolveRef(schema.items) : schema.items
+    const itemPath = `${path}[\${i}]`
+    const itemVar = 'item'
     return `if(Array.isArray(${varName})) {
       for (let i=0; i<${varName}.length; i+=1) {
-        const item = ${varName}[i]
-        ${this.propValidator(`${path}[\${i}]`, 'item', itemsSchema)}
+        const ${itemVar} = ${varName}[i]
+        ${this.requiredPropertyValidator(itemPath, itemVar)}
+        ${this.propValidator(itemPath, itemVar, itemsSchema)}
       }
     }`
   }
