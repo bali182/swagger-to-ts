@@ -1037,6 +1037,45 @@ class TypeGuardsGenerator extends BaseGenerator {
     }
 }
 
+function isPresent(varName) {
+    return `${varName} !== null && ${varName} !== undefined`;
+}
+function isAbsent(varName) {
+    return `${varName} === null || ${varName} === undefined`;
+}
+function isNotTypeOf(varName, type) {
+    return `typeof ${varName} !== '${type}'`;
+}
+function isObject(varName) {
+    return `(${varName} instanceof Object && !Array.isArray(${varName}))`;
+}
+function isNotObject(varName) {
+    return `(!(${varName} instanceof Object) || Array.isArray(${varName}))`;
+}
+function isArray(varName) {
+    return `Array.isArray(${varName})`;
+}
+function isNotArray(varName) {
+    return `!Array.isArray(${varName})`;
+}
+function isNotEqualString(varName, value) {
+    return `${varName} !== '${value}'`;
+}
+function forLoopCounter(arrayName, index = 'i') {
+    return `let ${index} = 0, len = ${arrayName}.length; ${index} < len; ${index} += 1`;
+}
+function resultObject(path$$1, message, pathInterpolated) {
+    if (pathInterpolated) {
+        return `{ path: \`${path$$1}\`, message: '${message}' }`;
+    }
+    else {
+        if (path$$1 === 'path') {
+            return `{ path, message: '${message}' }`;
+        }
+        return `{ path: ${path$$1}, message: '${message}' }`;
+    }
+}
+
 class ValidatorGenerator extends BaseGenerator {
     constructor(registry) {
         super(registry);
@@ -1082,8 +1121,8 @@ class ValidatorGenerator extends BaseGenerator {
         return '';
     }
     arrayValidator(schema) {
-        return `if(input === null || input === undefined || !Array.isArray(input)) {
-      results.push({ path, message: 'Should be an array!' })
+        return `if(${isAbsent('input')} || ${isNotArray('input')}) {
+      results.push(${resultObject('path', 'Should be an array!', false)})
     }
     ${this.arrayPropValidator('path', 'input', schema)}`;
     }
@@ -1102,16 +1141,17 @@ class ValidatorGenerator extends BaseGenerator {
                 .map(([name, propSchema]) => this.propertyValidator(name, propSchema, schema.required && schema.required.indexOf(name) >= 0))
                 .filter((str) => str !== null && str.length > 0)
                 .forEach((v) => validators.push(v));
+            validators.push(this.excessPropChecker('path', 'input', schema));
         }
-        return `if(input === null || input === undefined || !(input instanceof Object)) {
-      results.push({ path, message: 'Should be an object!' })
+        return `if(${isAbsent('input')} || ${isNotObject('input')}) {
+      results.push(${resultObject('path', 'Should be an object!', false)})
     } else {
       ${validators.join('\n')}
     }`;
     }
     enumValidator(schema) {
-        const stringCheck = `if (typeof input !== 'string') {
-      results.push({ path, message: 'Should represented as a string!' })
+        const stringCheck = `if(${isNotTypeOf('input', 'string')}) {
+      results.push(${resultObject('path', 'Should be represented as a string!', false)})
     }`;
         const enumName = this.registry.getNameBySchema(schema);
         const valuesConstName = `${camelCase(enumName)}Values`;
@@ -1125,14 +1165,14 @@ class ValidatorGenerator extends BaseGenerator {
     oneOfValidator(path$$1, schema) {
         const { mapping, propertyName } = schema.discriminator;
         const discPath = `${path$$1}.${propertyName}`;
-        return `if(input === null || input === undefined || !(input instanceof Object)) {
-      results.push({ path, message: 'Should be an object!' })
+        return `if(${isAbsent('input')} || ${isNotObject('input')}) {
+      results.push(${resultObject('path', 'Should be an object!', false)})
     } else {
       switch(input.${propertyName}) {
         ${entries(mapping)
             .map(([value, ref]) => this.oneOfDispatcher(value, ref))
             .join('\n')}
-        default: results.push({ path: \`${discPath}\`, message: \`Unexpected discriminator "\${(input as any).${propertyName}}"!\` })
+        default: results.push(${resultObject(discPath, 'Unexpected discriminator!', true)})
       }
     }`;
     }
@@ -1151,7 +1191,7 @@ class ValidatorGenerator extends BaseGenerator {
         return validators.join('\n');
     }
     discriminatorValidator(path$$1, varName, value) {
-        return `if(${varName} !== '${value}') {
+        return `if(${isNotEqualString(varName, value)}) {
       results.push({path: \`${path$$1}\`, message: 'Should be "${value}"!'})
     }`;
     }
@@ -1200,8 +1240,26 @@ class ValidatorGenerator extends BaseGenerator {
         }
         return validators.join('\n');
     }
+    excessPropChecker(path$$1, varName, schema) {
+        const discs = getDiscriminators(schema, this.registry).map(({ propertyName }) => propertyName);
+        const ownKeys = Object.keys(schema.properties || {});
+        const keysStr = discs
+            .concat(ownKeys)
+            .map((key) => `'${key}'`)
+            .join(', ');
+        return `if(${isPresent(varName)} && ${isObject(varName)}) {
+      const allowedKeys = [${keysStr}]
+      const keys = Object.keys(${varName})
+      for (${forLoopCounter('keys')}) {
+        const key = keys[i]
+        if (allowedKeys.indexOf(key) < 0) {
+          results.push({path: \`\${path}["\${key}"]\`, message: 'Unexpected property!'})
+        }
+      }
+    }`;
+    }
     arrayPropTypeValidator(path$$1, varName) {
-        return `if(${this.presenceCheckCondition(varName)} && !Array.isArray(${varName})) {
+        return `if(${isPresent(varName)} && ${isNotArray(varName)}) {
       results.push({ path: \`${path$$1}\`, message: 'Should be an array!' })
     }`;
     }
@@ -1212,8 +1270,8 @@ class ValidatorGenerator extends BaseGenerator {
         const itemsSchema = isRefType(schema.items) ? this.registry.resolveRef(schema.items) : schema.items;
         const itemPath = `${path$$1}[\${i}]`;
         const itemVar = 'item';
-        return `if(Array.isArray(${varName})) {
-      for (let i=0; i<${varName}.length; i+=1) {
+        return `if(${isArray(varName)}) {
+      for (${forLoopCounter(varName)}) {
         const ${itemVar} = ${varName}[i]
         ${this.requiredPropertyValidator(itemPath, itemVar)}
         ${this.propValidator(itemPath, itemVar, itemsSchema)}
@@ -1229,7 +1287,7 @@ class ValidatorGenerator extends BaseGenerator {
         const validator = this.propValidator(`\${path}["\${key}"]`, 'value', propSchema);
         if (validator) {
             return `const keys = Object.keys(${varName})
-        for(let i=0; i<keys.length; i+=1) {
+        for(${forLoopCounter('keys')}) {
           const key = keys[i]
           const value = ${varName}[key]
           ${validator}
@@ -1243,38 +1301,35 @@ class ValidatorGenerator extends BaseGenerator {
         }
         const np = this.registry.getNameProvider();
         const name = this.registry.getNameBySchema(schema);
-        return `if(${this.presenceCheckCondition(varName)}) {
+        return `if(${isPresent(varName)}) {
       results.push(...${np.getValidatorName(name)}(${varName}, \`${path$$1}\`))
     }`;
     }
     requiredPropertyValidator(path$$1, varName) {
-        return `if(${varName} === null || ${varName} === undefined) {
+        return `if(${isAbsent(varName)}) {
       results.push({ path: \`${path$$1}\`, message: 'Should not be empty!'})
     }`;
     }
     minLengthChecker(message) {
         return (path$$1, varName, minLength) => {
-            return `if(${this.presenceCheckCondition(varName)} && ${varName}.length < ${minLength}) {
+            return `if(${isPresent(varName)} && ${varName}.length < ${minLength}) {
         results.push({ path: \`${path$$1}\`, message: '${message(minLength)}' })
       }`;
         };
     }
     maxLengthChecker(message) {
         return (path$$1, varName, maxLength) => {
-            return `if(${this.presenceCheckCondition(varName)} && ${varName}.length > ${maxLength}) {
+            return `if(${isPresent(varName)} && ${varName}.length > ${maxLength}) {
         results.push({ path: \`${path$$1}\`, message: '${message(maxLength)}' })
       }`;
         };
     }
     basicTypeCheckerValidator(type) {
         return (path$$1, varName) => {
-            return `if(${this.presenceCheckCondition(varName)} && typeof ${varName} !== '${type}') {
+            return `if(${isPresent(varName)} && ${isNotTypeOf(varName, type)}) {
         results.push({ path: \`${path$$1}\`, message: 'Should be a ${type}!' })
       }`;
         };
-    }
-    presenceCheckCondition(varName) {
-        return `${varName} !== null && ${varName} !== undefined`;
     }
 }
 
