@@ -1157,7 +1157,7 @@ class ValidatorGenerator extends BaseGenerator {
         const enumName = this.registry.getNameBySchema(schema);
         const valuesConstName = `${camelCase(enumName)}Values`;
         const values$$1 = `${schema.enum.map((v) => `"${v}"`).join(', ')}`;
-        const enumValueCheck = `const ${valuesConstName} = [${values$$1}]
+        const enumValueCheck = `const ${valuesConstName}: string[] = [${values$$1}]
     if(${valuesConstName}.indexOf(input) < 0) {
       results.push({ path, message: \`Should be one of \${${valuesConstName}.map((v) => \`"\${v}"\`).join(", ")}!\`})
     }`;
@@ -1193,7 +1193,7 @@ class ValidatorGenerator extends BaseGenerator {
     }
     discriminatorValidator(path$$1, varName, value) {
         return `if(${isNotEqualString(varName, value)}) {
-      results.push({path: \`${path$$1}\`, message: 'Should be "${value}"!'})
+      results.push(${resultObject(path$$1, `Should be "${value}"!`, true)})
     }`;
     }
     propValidator(path$$1, varName, schema) {
@@ -1249,19 +1249,19 @@ class ValidatorGenerator extends BaseGenerator {
             .map((key) => `'${key}'`)
             .join(', ');
         return `if(${isPresent(varName)} && ${isObject(varName)}) {
-      const allowedKeys = [${keysStr}]
+      const allowedKeys: string[] = [${keysStr}]
       const keys = Object.keys(${varName})
       for (${forLoopCounter('keys')}) {
         const key = keys[i]
         if (allowedKeys.indexOf(key) < 0) {
-          results.push({path: \`\${path}["\${key}"]\`, message: 'Unexpected property!'})
+          results.push(${resultObject('${path}["${key}"]', 'Unexpected property!', true)})
         }
       }
     }`;
     }
     arrayPropTypeValidator(path$$1, varName) {
         return `if(${isPresent(varName)} && ${isNotArray(varName)}) {
-      results.push({ path: \`${path$$1}\`, message: 'Should be an array!' })
+      results.push(${resultObject(path$$1, 'Should be an array!', true)})
     }`;
     }
     arrayPropValidator(path$$1, varName, schema) {
@@ -1308,27 +1308,27 @@ class ValidatorGenerator extends BaseGenerator {
     }
     requiredPropertyValidator(path$$1, varName) {
         return `if(${isAbsent(varName)}) {
-      results.push({ path: \`${path$$1}\`, message: 'Should not be empty!'})
+      results.push(${resultObject(path$$1, 'Should not be empty!', true)})
     }`;
     }
     minLengthChecker(message) {
         return (path$$1, varName, minLength) => {
             return `if(${isPresent(varName)} && ${varName}.length < ${minLength}) {
-        results.push({ path: \`${path$$1}\`, message: '${message(minLength)}' })
+        results.push(${resultObject(path$$1, message(minLength), true)})
       }`;
         };
     }
     maxLengthChecker(message) {
         return (path$$1, varName, maxLength) => {
             return `if(${isPresent(varName)} && ${varName}.length > ${maxLength}) {
-        results.push({ path: \`${path$$1}\`, message: '${message(maxLength)}' })
+        results.push(${resultObject(path$$1, message(maxLength), true)})
       }`;
         };
     }
     basicTypeCheckerValidator(type) {
         return (path$$1, varName) => {
             return `if(${isPresent(varName)} && ${isNotTypeOf(varName, type)}) {
-        results.push({ path: \`${path$$1}\`, message: 'Should be a ${type}!' })
+        results.push(${resultObject(path$$1, `Should be a ${type}!`, true)})
       }`;
         };
     }

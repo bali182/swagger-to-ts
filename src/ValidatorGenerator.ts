@@ -110,7 +110,7 @@ export class ValidatorGenerator extends BaseGenerator<string> {
     const enumName = this.registry.getNameBySchema(schema)
     const valuesConstName = `${camelCase(enumName)}Values`
     const values = `${schema.enum.map((v) => `"${v}"`).join(', ')}`
-    const enumValueCheck = `const ${valuesConstName} = [${values}]
+    const enumValueCheck = `const ${valuesConstName}: string[] = [${values}]
     if(${valuesConstName}.indexOf(input) < 0) {
       results.push({ path, message: \`Should be one of \${${valuesConstName}.map((v) => \`"\${v}"\`).join(", ")}!\`})
     }`
@@ -147,7 +147,7 @@ export class ValidatorGenerator extends BaseGenerator<string> {
 
   discriminatorValidator(path: string, varName: string, value: string): string {
     return `if(${isNotEqualString(varName, value)}) {
-      results.push({path: \`${path}\`, message: 'Should be "${value}"!'})
+      results.push(${resultObject(path, `Should be "${value}"!`, true)})
     }`
   }
 
@@ -203,12 +203,12 @@ export class ValidatorGenerator extends BaseGenerator<string> {
       .map((key) => `'${key}'`)
       .join(', ')
     return `if(${isPresent(varName)} && ${isObject(varName)}) {
-      const allowedKeys = [${keysStr}]
+      const allowedKeys: string[] = [${keysStr}]
       const keys = Object.keys(${varName})
       for (${forLoopCounter('keys')}) {
         const key = keys[i]
         if (allowedKeys.indexOf(key) < 0) {
-          results.push({path: \`\${path}["\${key}"]\`, message: 'Unexpected property!'})
+          results.push(${resultObject('${path}["${key}"]', 'Unexpected property!', true)})
         }
       }
     }`
@@ -216,7 +216,7 @@ export class ValidatorGenerator extends BaseGenerator<string> {
 
   arrayPropTypeValidator(path: string, varName: string) {
     return `if(${isPresent(varName)} && ${isNotArray(varName)}) {
-      results.push({ path: \`${path}\`, message: 'Should be an array!' })
+      results.push(${resultObject(path, 'Should be an array!', true)})
     }`
   }
 
@@ -267,14 +267,14 @@ export class ValidatorGenerator extends BaseGenerator<string> {
 
   requiredPropertyValidator(path: string, varName: string) {
     return `if(${isAbsent(varName)}) {
-      results.push({ path: \`${path}\`, message: 'Should not be empty!'})
+      results.push(${resultObject(path, 'Should not be empty!', true)})
     }`
   }
 
   minLengthChecker(message: (minLength: number) => string) {
     return (path: string, varName: string, minLength: number): string => {
       return `if(${isPresent(varName)} && ${varName}.length < ${minLength}) {
-        results.push({ path: \`${path}\`, message: '${message(minLength)}' })
+        results.push(${resultObject(path, message(minLength), true)})
       }`
     }
   }
@@ -282,7 +282,7 @@ export class ValidatorGenerator extends BaseGenerator<string> {
   maxLengthChecker(message: (minLength: number) => string) {
     return (path: string, varName: string, maxLength: number): string => {
       return `if(${isPresent(varName)} && ${varName}.length > ${maxLength}) {
-        results.push({ path: \`${path}\`, message: '${message(maxLength)}' })
+        results.push(${resultObject(path, message(maxLength), true)})
       }`
     }
   }
@@ -295,7 +295,7 @@ export class ValidatorGenerator extends BaseGenerator<string> {
   basicTypeCheckerValidator(type: string) {
     return (path: string, varName: string) => {
       return `if(${isPresent(varName)} && ${isNotTypeOf(varName, type)}) {
-        results.push({ path: \`${path}\`, message: 'Should be a ${type}!' })
+        results.push(${resultObject(path, `Should be a ${type}!`, true)})
       }`
     }
   }
