@@ -111,8 +111,11 @@ export class TypeGenerator extends BaseGenerator<string> {
 
   generateAllOfType(name: string): string {
     const schema = this.registry.getSchemaByName(name)
-    const types = schema.allOf.map((e) => this.typeRefGenerator.generate(e)).join('&')
-    return `export type ${name} = ${types}`
+    const { allOf, ...rest } = schema
+    const types = allOf.map((e) => this.typeRefGenerator.generate(e))
+    const ownType = this.typeRefGenerator.generate(rest)
+    const typeLiteral = [ownType].concat(types).join('&')
+    return `export type ${name} = ${typeLiteral}`
   }
 
   generateArrayType(name: string): string {
