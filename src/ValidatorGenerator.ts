@@ -31,6 +31,12 @@ import {
   resultObject,
 } from './validationUtils'
 
+export enum StringFormat {
+  JS_VARIABLE = 'jsVariable',
+}
+
+const JS_VAR_REGEX = '/^[a-zA-Z]\\w*$/'
+
 export class ValidatorGenerator extends BaseGenerator<string> {
   constructor(registry: TypeRegistry) {
     super(registry)
@@ -166,6 +172,9 @@ export class ValidatorGenerator extends BaseGenerator<string> {
             if (!isNil(schema.maxLength)) {
               validators.push(this.stringMaxLengthChecker(path, varName, schema.maxLength))
             }
+            if (!isNil(schema.format)) {
+              validators.push(this.formatChecker(path, varName, schema.format))
+            }
             break
           }
           case PrimitiveType.boolean: {
@@ -285,6 +294,25 @@ export class ValidatorGenerator extends BaseGenerator<string> {
         results.push(${resultObject(path, message(maxLength), true)})
       }`
     }
+  }
+
+  formatChecker(path: string, varName: string, format: string): string {
+    switch (format) {
+      case StringFormat.JS_VARIABLE:
+        return this.stringRegexChecker(
+          path,
+          varName,
+          JS_VAR_REGEX,
+          'Should start with a letter and can contain only the following: A-Z, a-z, 0-9, _ (underscore)!',
+        )
+    }
+    return null
+  }
+
+  stringRegexChecker(path: string, varName: string, regex: string, errorMessage: string): string {
+    return `if(${isPresent(varName)} && !${regex}.test(${varName})) {
+      results.push(${resultObject(path, errorMessage, true)})
+    }`
   }
 
   stringMinLengthChecker = this.minLengthChecker((l) => `Should be at least ${l} charater(s)!`)

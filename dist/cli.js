@@ -1105,6 +1105,11 @@ function resultObject(path$$1, message, pathInterpolated) {
     }
 }
 
+var StringFormat;
+(function (StringFormat) {
+    StringFormat["JS_VARIABLE"] = "jsVariable";
+})(StringFormat || (StringFormat = {}));
+const JS_VAR_REGEX = '/^[a-zA-Z]\\w*$/';
 class ValidatorGenerator extends BaseGenerator {
     constructor(registry) {
         super(registry);
@@ -1240,6 +1245,9 @@ class ValidatorGenerator extends BaseGenerator {
                         if (!isNil(schema.maxLength)) {
                             validators.push(this.stringMaxLengthChecker(path$$1, varName, schema.maxLength));
                         }
+                        if (!isNil(schema.format)) {
+                            validators.push(this.formatChecker(path$$1, varName, schema.format));
+                        }
                         break;
                     }
                     case PrimitiveType.boolean: {
@@ -1352,6 +1360,18 @@ class ValidatorGenerator extends BaseGenerator {
         results.push(${resultObject(path$$1, message(maxLength), true)})
       }`;
         };
+    }
+    formatChecker(path$$1, varName, format) {
+        switch (format) {
+            case StringFormat.JS_VARIABLE:
+                return this.stringRegexChecker(path$$1, varName, JS_VAR_REGEX, 'Should start with a letter and can contain only the following: A-Z, a-z, 0-9, _ (underscore)!');
+        }
+        return null;
+    }
+    stringRegexChecker(path$$1, varName, regex, errorMessage) {
+        return `if(${isPresent(varName)} && !${regex}.test(${varName})) {
+      results.push(${resultObject(path$$1, errorMessage, true)})
+    }`;
     }
     basicTypeCheckerValidator(type) {
         return (path$$1, varName) => {
