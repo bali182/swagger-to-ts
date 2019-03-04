@@ -1344,7 +1344,7 @@ class ValidatorGenerator extends BaseGenerator {
     }
     requiredPropertyValidator(path$$1, varName) {
         return `if(${isAbsent(varName)}) {
-      results.push(${resultObject(path$$1, 'Should not be empty!', true)})
+      results.push(${resultObject(path$$1, 'Should be defined!', true)})
     }`;
     }
     minLengthChecker(message) {

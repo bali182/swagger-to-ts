@@ -276,7 +276,7 @@ export class ValidatorGenerator extends BaseGenerator<string> {
 
   requiredPropertyValidator(path: string, varName: string) {
     return `if(${isAbsent(varName)}) {
-      results.push(${resultObject(path, 'Should not be empty!', true)})
+      results.push(${resultObject(path, 'Should be defined!', true)})
     }`
   }
 
